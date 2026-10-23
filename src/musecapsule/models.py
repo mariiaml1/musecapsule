@@ -33,3 +33,13 @@ class EvidenceRef(BaseModel):
         if not value.strip():
             raise ValueError("Evidence quote must not be blank.")
         return value
+
+class ImageFragment(BaseModel):
+    """An image extracted from the user's narrative, grounded in source quotes.
+    Represents narrative content rather than a symbolic interpretation."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    label: str = Field(min_length=1)
+    evidence: list[EvidenceRef] = Field(min_length=1)

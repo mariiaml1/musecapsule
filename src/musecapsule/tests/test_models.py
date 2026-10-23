@@ -3,8 +3,8 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from musecapsule.models import EvidenceRef, Intent, Message
-from src.musecapsule.evidence import validate_evidence
+from musecapsule.evidence import validate_evidence
+from musecapsule.models import EvidenceRef, ImageFragment, Intent, Message
 
 
 def test_intent_rejects_non_string_constrain():
@@ -94,3 +94,54 @@ def test_evidence_rejects_not_user_message():
     
     with pytest.raises(ValueError):
      validate_evidence(evidence, message)
+
+@pytest.mark.parametrize("label", ["", " ", "\t\n"])
+def test_image_frame_rejects_blank_label(label: str):
+    message = Message(
+        role="user",
+        text="A golden note floats inside the capsule.",
+    )
+
+    evidence_ref = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+
+    with pytest.raises(ValidationError):
+        ImageFragment(label=label, evidence=[evidence_ref])
+
+
+def test_image_frame_rejects_blank_evidence():
+    with pytest.raises(ValidationError):
+        ImageFragment(
+            label="Golden note",
+            evidence=[],
+        )
+
+
+def test_image_frame_accepts_created_evidenceref():
+    message = Message(
+        role="user",
+        text="A golden note floats inside the capsule.",
+    )
+
+    evidence_ref = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+
+    fragment = ImageFragment(
+        label="Golden note",
+        evidence=[
+            evidence_ref,
+        ],
+    )
+
+    assert fragment.evidence[0].quote == evidence_ref.quote
+    assert fragment.evidence[0].message_id == evidence_ref.message_id
+
+
+@pytest.mark.parametrize("evidence_fields", [{}, {"evidence": []}])
+def test_image_fragment_requires_evidence(evidence_fields):
+    with pytest.raises(ValidationError):
+        ImageFragment(label="Golden note", **evidence_fields)
