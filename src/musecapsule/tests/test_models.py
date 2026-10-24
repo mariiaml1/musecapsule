@@ -4,8 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from musecapsule.evidence import validate_evidence
-from musecapsule.models import EvidenceRef, ImageFragment, Intent, Message
-
+from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
 
 def test_intent_rejects_non_string_constrain():
     with pytest.raises(ValidationError):
@@ -154,3 +153,62 @@ def test_image_frame_accepts_created_evidenceref():
 def test_image_fragment_requires_evidence(evidence_fields):
     with pytest.raises(ValidationError):
         ImageFragment(label="Golden note", **evidence_fields)
+
+
+def test_hypothesis_defaults_to_proposed():
+    message = Message(
+        role="user",
+        text="A golden note floats inside the capsule.",
+    )
+    evidence = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+
+    hypothesis = Hypothesis(
+        statement="The note may represent a selectable idea.",
+        image_ids=[uuid4()],
+        evidence=[evidence],
+    )
+
+    assert hypothesis.status == "proposed"
+
+
+@pytest.mark.parametrize("statement", ["", " ", "\t\n"])
+def test_hypothesis_rejects_blank_statement(statement: str):
+    message = Message(
+        role="user",
+        text="A golden note floats inside the capsule.",
+    )
+    evidence = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+
+    with pytest.raises(ValidationError):
+        Hypothesis(statement=statement, image_ids=[uuid4()], evidence=[evidence])
+
+
+@pytest.mark.parametrize("image_ids_fields", [{}, {"image_ids": []}])
+def test_hypothesis_requires_image_ids(image_ids_fields):
+    evidence = EvidenceRef(
+        message_id=uuid4(),
+        quote="A golden note",
+    )
+
+    with pytest.raises(ValidationError):
+        Hypothesis(
+            statement="The note may represent a selectable idea.",
+            evidence=[evidence],
+            **image_ids_fields,
+        )
+
+
+@pytest.mark.parametrize("evidence_fields", [{}, {"evidence": []}])
+def test_hypothesis_requires_evidence(evidence_fields):
+    with pytest.raises(ValidationError):
+        Hypothesis(
+            statement="The note may represent a selectable idea.",
+            image_ids=[uuid4()],
+            **evidence_fields,
+        )

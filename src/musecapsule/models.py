@@ -45,3 +45,30 @@ class ImageFragment(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     label: str = Field(min_length=1)
     evidence: list[EvidenceRef] = Field(min_length=1)
+
+
+class Hypothesis(BaseModel):
+    """A revisable interpretation grounded in narrative images and source quotes.
+
+    Represents a model hypothesis rather than an established user fact.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    statement: str = Field(min_length=1)
+    status: Literal["proposed", "supported", "unsupported", "superseded"] = "proposed"
+    image_ids: list[UUID] = Field(min_length=1)
+    evidence: list[EvidenceRef] = Field(min_length=1)
+
+
+class HypothesisRevision(BaseModel):
+    """A recorded status change with the previous hypothesis and new evidence."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    previous: Hypothesis
+    new_status: Literal["proposed", "supported", "unsupported", "superseded"]
+    reason: str = Field(min_length=1)
+    evidence: list[EvidenceRef] = Field(min_length=1)
+    session_revision: int = Field(ge=1)
