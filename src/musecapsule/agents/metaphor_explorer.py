@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from musecapsule.evidence import validate_evidence
 from musecapsule.models import EvidenceRef, ImageFragment, Message
-
+from collections.abc import Callable
 
 class ExtractedImage(BaseModel):
     """An image proposed by the model, awaiting source validation."""
@@ -54,5 +54,27 @@ def parse_image_extraction(
                 evidence=[evidence_ref],
             )
         )
- 
+
     return result
+
+
+def extract_images(
+    message: Message,
+    *,
+    generate: Callable[[str], str],
+) -> list[ImageFragment]:
+    """Extract grounded images using the supplied generation function.
+
+    Validate the message role before generation and verify the full response
+    before returning image fragments.
+
+    Raises:
+        ValueError: If the message is not from the user or the response is invalid.
+        RuntimeError: If generation fails.
+    """
+    if message.role != "user":
+        raise ValueError("Message not from the user role")
+
+    generated_text = generate(message.text)
+
+    return parse_image_extraction(generated_text, message)

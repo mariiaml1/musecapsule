@@ -1,6 +1,6 @@
 import pytest
 
-from musecapsule.agents.metaphor_explorer import parse_image_extraction
+from musecapsule.agents.metaphor_explorer import extract_images, parse_image_extraction
 from musecapsule.models import Message
 
 
@@ -63,3 +63,37 @@ def test_parse_image_extraction_accepts_empty_images():
     result = parse_image_extraction('{"images": []}', message)
 
     assert result == []
+
+
+def test_extract_images_passes_message_text_to_generation():
+    message = Message(
+        role="user",
+        text="A golden note floats.",
+    )
+    received_texts = []
+
+    def generate(text: str) -> str:
+        received_texts.append(text)
+        return """
+        {"images": [{"label": "Golden note", "quote": "A golden note"}]}
+        """
+
+    result = extract_images(message, generate=generate)
+
+    assert received_texts == [message.text]
+    assert len(result) == 1
+    assert result[0].label == "Golden note"
+    assert result[0].evidence[0].message_id == message.id
+
+
+def test_extract_images_rejects_assistant_before_generation():
+    message = Message(
+        role="assistant",
+        text="What happens inside the capsule?",
+    )
+
+    def generate(text: str) -> str:
+        pytest.fail("Generation must not run for an assistant message.")
+
+    with pytest.raises(ValueError, match="Message not from the user role"):
+        extract_images(message, generate=generate)
