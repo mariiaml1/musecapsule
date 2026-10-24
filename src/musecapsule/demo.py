@@ -23,6 +23,11 @@ def main() -> None:
         required=True,
         help="Path to the built Sign in with ChatGPT DevKit checkout.",
     )
+    parser.add_argument(
+        "--model",
+        default="gpt-6.1-sol",
+        help="Model slug available to the connected ChatGPT account.",
+    ),
     args = parser.parse_args()
 
     message = Message(
@@ -37,9 +42,14 @@ def main() -> None:
     )
     state = append_message(state, message)
 
+    prompt_path = Path(__file__).resolve().parent / "prompts" / "metaphor_explorer.md"
+    instructions = prompt_path.read_text(encoding="utf-8")
+
     raw_response = request_image_extraction(
         text=message.text,
         devkit_dir=args.devkit_dir,
+        instructions=instructions,
+        model=args.model,
     )
 
     fragments = parse_image_extraction(raw_response, message)

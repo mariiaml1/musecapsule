@@ -3,7 +3,13 @@ import subprocess
 from pathlib import Path
 
 
-def request_image_extraction(text: str, devkit_dir: Path) -> str:
+def request_image_extraction(
+    text: str,
+    devkit_dir: Path,
+    *,
+    instructions: str,
+    model: str,
+) -> str:
     """Request image extraction through the local ChatGPT bridge.
 
     Return the raw model response for separate validation.
@@ -29,7 +35,14 @@ def request_image_extraction(text: str, devkit_dir: Path) -> str:
     try:
         completed = subprocess.run(
             [str(executable), str(script), str(devkit_dir)],
-            input=json.dumps({"text": text}, ensure_ascii=False),
+            input=json.dumps(
+                {
+                    "text": text,
+                    "instructions": instructions,
+                    "model": model,
+                },
+                ensure_ascii=False,
+            ),
             capture_output=True,
             text=True,
             encoding="utf-8",
