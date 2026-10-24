@@ -1,34 +1,51 @@
-# MuseCapsule AI
+## ChatGPT image extraction demo
 
-Turn intent, constraints, and imagination into traceable product ideas.
+The demo calls ChatGPT through a local Electron bridge, validates the
+response with Pydantic, verifies source quotes, and updates session state.
 
-MuseCapsule explores user-provided metaphors through an adaptive dialogue.
-Product ideas remain connected to the original goal and the images that
-inspired them.
+### Requirements
 
-## Implemented
+- Python 3.13
+- Node.js >= 22.12
+- macOS (the currently tested platform)
+- An eligible ChatGPT account with ChatGPT plan usage enabled
 
-- Validated intent and message models.
-- Evidence references to exact fragments of user messages.
-- Session state with revision tracking.
-- Message updates that preserve the previous state.
-- Duplicate message detection.
-- Unit tests for models, evidence, and state updates.
+### Set up the ChatGPT DevKit
 
-## Planned
-
-- Structured metaphor extraction using an LLM.
-- Adaptive dialogue and hypothesis revision.
-- Idea generation with evidence references.
-- Similar-product search and MVP briefs.
-- Session persistence and a minimal web interface.
-
-## Local development
-
-Requires Python 3.13.
+Run these commands from the directory containing your MuseCapsule checkout:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/openai/sign-in-with-chatgpt-devkit.git
+cd sign-in-with-chatgpt-devkit
+git checkout --detach 0a36fefeb913055c8c7a1a29b63d82b96b2e841a
+npm ci
+npm run build -w @siwc/local
+```
+
+Only the local SDK needs to be built. The Paste Perfect desktop example
+is not required.
+
+### Run the demo
+
+From the MuseCapsule project root, with the Python environment activated:
+
+```bash
 python -m pip install -e ".[dev]"
-python -m pytest -q
+python -m musecapsule.demo --devkit-dir ../sign-in-with-chatgpt-devkit
+```
+
+On first use, a browser opens for ChatGPT authorization. Credentials are
+stored outside the repository and encrypted using macOS Keychain-backed
+Electron safeStorage.
+
+The demo makes a live model request and consumes ChatGPT plan allowance.
+
+### Current limitations
+
+- Extracts images from one demo message.
+- Uses prompted JSON with application-side validation; schema-constrained
+  generation is not yet implemented.
+- Image boundaries and labels may vary between requests.
+- Uses the first model returned by the SDK.
+- Requires a separate DevKit checkout.
+- Does not yet persist sessions or orchestrate the four planned agent roles.

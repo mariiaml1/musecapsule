@@ -26,6 +26,7 @@ def test_append_message_preserves_previous_state():
     assert state.messages == []
     assert state.revision == 0
 
+
 def test_append_rejects_the_same_message():
     state = SessionState(
         intent=Intent(
@@ -37,11 +38,12 @@ def test_append_rejects_the_same_message():
         role="user",
         text="A golden note floats inside a capsule.",
     )
-    
+
     updated = append_message(state, message)
 
     with pytest.raises(ValueError):
-     append_message(updated, message)
+        append_message(updated, message)
+
 
 def test_append_image_fragment_rejects_invalid_evidence():
     message = Message(
