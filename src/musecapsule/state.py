@@ -73,10 +73,10 @@ def append_image_fragment(
     for evidence_item in fragment.evidence:
         message = messages_by_id.get(evidence_item.message_id)
 
-    if message is None:
-        raise ValueError("Evidence references a missing message.")
+        if message is None:
+            raise ValueError("Evidence references a missing message.")
 
-    validate_evidence(evidence_item, message)
+        validate_evidence(evidence_item, message)
 
     return SessionState(
         id=state.id,

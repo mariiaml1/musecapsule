@@ -1,8 +1,16 @@
+import json
+from uuid import UUID, uuid4
+
 import pytest
 
-from musecapsule.agents.metaphor_explorer import extract_images, parse_image_extraction
-from musecapsule.models import Message
-
+from musecapsule.agents.metaphor_explorer import (
+    build_hypothesis_context,
+    extract_images,
+    parse_hypothesis_proposals,
+    parse_image_extraction,
+    propose_hypotheses,
+)
+from musecapsule.models import EvidenceRef, ImageFragment, Intent, Message
 
 def test_parse_image_extraction_returns_grounded_images():
     message = Message(
@@ -97,3 +105,164 @@ def test_extract_images_rejects_assistant_before_generation():
 
     with pytest.raises(ValueError, match="Message not from the user role"):
         extract_images(message, generate=generate)
+
+
+def test_parse_hypothesis_proposals_returns_grounded_hypotheses():
+    image_id = uuid4()
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image = ImageFragment(
+        id=image_id,
+        label="Golden note",
+        evidence=[source],
+    )
+    raw_response = json.dumps(
+        {
+            "hypotheses": [
+                {
+                    "statement": "The note may represent choosing one idea to develop.",
+                    "image_ids": [str(image_id)],
+                    "evidence": [source.model_dump(mode="json")],
+                }
+            ]
+        }
+    )
+
+    result = parse_hypothesis_proposals(
+        raw_response, messages=[message], images=[image]
+    )
+
+    assert len(result) == 1
+
+    hypothesis = result[0]
+
+    assert hypothesis.statement == (
+        "The note may represent choosing one idea to develop."
+    )
+    assert hypothesis.status == "proposed"
+    assert hypothesis.image_ids == [image.id]
+    assert hypothesis.evidence == [source]
+    assert isinstance(hypothesis.id, UUID)
+
+
+def test_parse_hypothesis_proposals_rejects_fabricated_quote():
+    image_id = uuid4()
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image = ImageFragment(
+        id=image_id,
+        label="Golden note",
+        evidence=[source],
+    )
+    raw_response = json.dumps(
+        {
+            "hypotheses": [
+                {
+                    "statement": "The note may represent choosing one idea to develop.",
+                    "image_ids": [str(image_id)],
+                    "evidence": [
+                        {
+                            "message_id": str(message.id),
+                            "quote": "some",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(
+        ValueError, match="Evidence quote was not found in the message."
+    ):
+        parse_hypothesis_proposals(raw_response, messages=[message], images=[image])
+
+
+def test_parse_hypothesis_proposals_rejects_unknown_image():
+    image_id = uuid4()
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[source],
+    )
+    raw_response = json.dumps(
+        {
+            "hypotheses": [
+                {
+                    "statement": "The note may represent choosing one idea to develop.",
+                    "image_ids": [str(image.id), str(image_id)],
+                    "evidence": [source.model_dump(mode="json")],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="Hypothesis references a missing image."):
+        parse_hypothesis_proposals(raw_response, messages=[message], images=[image])
+
+
+def test_build_hypothesis_context_preserves_goal_and_sources():
+    intent = Intent(
+        goal="Build an AI portfolio project",
+        constraints=["Solo development", "Local execution"],
+    )
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[
+            EvidenceRef(
+                message_id=message.id,
+                quote="A golden note",
+            )
+        ],
+    )
+
+    context = build_hypothesis_context(
+        intent,
+        messages=[message],
+        images=[image],
+    )
+    payload = json.loads(context)
+
+    assert payload["intent"]["goal"] == intent.goal
+    assert payload["intent"]["constraints"] == intent.constraints
+    assert payload["messages"][0]["id"] == str(message.id)
+    assert payload["messages"][0]["text"] == message.text
+    assert payload["images"][0]["id"] == str(image.id)
+    assert payload["images"][0]["evidence"][0]["message_id"] == str(message.id)
+    assert payload["images"][0]["evidence"][0]["quote"] == "A golden note"
+
+
+def test_propose_hypotheses_skips_generation_without_images():
+    def generate(_: str) -> str:
+        pytest.fail("Generation must not run without images.")
+
+    result = propose_hypotheses(
+        Intent(goal="Build an AI portfolio project"),
+        images=[],
+        messages=[],
+        generate=generate,
+    )
+
+    assert result == []

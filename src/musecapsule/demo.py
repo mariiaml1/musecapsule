@@ -1,15 +1,18 @@
 import argparse
 from pathlib import Path
 
-from musecapsule.agents.metaphor_explorer import parse_image_extraction
+from musecapsule.agents.metaphor_explorer import (
+    parse_image_extraction,
+    propose_hypotheses,
+)
 from musecapsule.llm import request_image_extraction
 from musecapsule.models import Intent, Message
 from musecapsule.state import (
     SessionState,
+    append_hypothesis,
     append_image_fragment,
     append_message,
 )
-
 
 def main() -> None:
     """Extract images through ChatGPT and add validated results to a demo session."""
@@ -56,6 +59,33 @@ def main() -> None:
 
     for fragment in fragments:
         state = append_image_fragment(state, fragment)
+
+    hypothesis_prompt_path = (
+        Path(__file__).resolve().parent / "prompts" / "hypothesis_proposals.md"
+    )
+
+    hypothesis_instructions = hypothesis_prompt_path.read_text(
+        encoding="utf-8",
+    )
+
+    def generate_hypotheses(context: str) -> str:
+        """Send hypothesis context through the configured local bridge."""
+        return request_image_extraction(
+            text=context,
+            devkit_dir=args.devkit_dir,
+            instructions=hypothesis_instructions,
+            model=args.model,
+        )
+
+    hypotheses = propose_hypotheses(
+        state.intent,
+        images=state.images,
+        messages=state.messages,
+        generate=generate_hypotheses,
+    )
+
+    for hypothesis in hypotheses:
+        state = append_hypothesis(state, hypothesis)
 
     print(state.model_dump_json(indent=2))
 
