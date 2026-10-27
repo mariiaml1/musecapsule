@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from musecapsule.agents.imagination_guide import generate_exploration_question
 from musecapsule.agents.metaphor_explorer import (
     parse_image_extraction,
     propose_hypotheses,
@@ -15,6 +16,7 @@ from musecapsule.state import (
     append_message,
     revise_hypothesis_status,
 )
+
 
 def main() -> None:
     """Extract images through ChatGPT and add validated results to a demo session."""
@@ -130,6 +132,36 @@ def main() -> None:
             reason=proposal.reason,
             evidence=proposal.evidence,
         )
+
+    guide_prompt_path = (
+        Path(__file__).resolve().parent / "prompts" / "imagination_guide.md"
+    )
+    guide_instructions = guide_prompt_path.read_text(encoding="utf-8")
+
+    def generate_question(context: str) -> str:
+        """Request an exploration question through the configured bridge."""
+        return request_generation(
+            text=context,
+            devkit_dir=args.devkit_dir,
+            instructions=guide_instructions,
+            model=args.model,
+        )
+
+    question = generate_exploration_question(
+        state.intent,
+        messages=state.messages,
+        images=state.images,
+        hypotheses=state.hypotheses,
+        generate=generate_question,
+    )
+
+    state = append_message(
+        state,
+        Message(
+            role="assistant",
+            text=question.question,
+        ),
+    )
 
     print(state.model_dump_json(indent=2))
 
