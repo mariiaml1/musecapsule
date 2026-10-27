@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -7,6 +7,7 @@ from musecapsule.agents.imagination_guide import generate_exploration_question
 from musecapsule.agents.metaphor_explorer import (
     extract_images,
     propose_hypotheses,
+    propose_hypothesis_revisions,
 )
 from musecapsule.models import Message
 from musecapsule.state import (
@@ -14,23 +15,24 @@ from musecapsule.state import (
     append_hypothesis,
     append_image_fragment,
     append_message,
+    revise_hypothesis_status,
 )
 
-
 class ExplorationState(TypedDict):
-    """Workflow data for an initial narrative exploration."""
+    """Workflow data for processing one user narrative message."""
 
     session: SessionState
     incoming_message: Message
 
 
-def build_initial_exploration_graph(
+def build_exploration_graph(
     *,
     generate_images: Callable[[str], str],
     generate_hypotheses: Callable[[str], str],
+    generate_revisions: Callable[[str], str],
     generate_question: Callable[[str], str],
 ):
-    """Compile the initial exploration workflow with injected generation."""
+    """Compile an exploration workflow for one user message."""
 
     def explore_images(state: ExplorationState) -> dict:
         """Validate extraction before adding the message and its images."""
@@ -75,14 +77,54 @@ def build_initial_exploration_graph(
 
         return {"session": session}
 
+    def route_after_images(
+        state: ExplorationState,
+    ) -> Literal["explore_hypotheses", "revise_hypotheses", "ask_question"]:
+        """Choose a route from the existing hypothesis state."""
+        hypotheses = state["session"].hypotheses
+
+        if not hypotheses:
+            return "explore_hypotheses"
+
+        if any(item.status != "superseded" for item in hypotheses):
+            return "revise_hypotheses"
+
+        return "ask_question"
+
+    def revise_hypotheses(state: ExplorationState) -> dict:
+        """Apply validated status revisions grounded in the new message."""
+        session = state["session"]
+        proposals = propose_hypothesis_revisions(
+            session.intent,
+            hypotheses=session.hypotheses,
+            messages=session.messages,
+            clarification=state["incoming_message"],
+            generate=generate_revisions,
+        )
+
+        for proposal in proposals:
+            session = revise_hypothesis_status(
+                session,
+                proposal.hypothesis_id,
+                new_status=proposal.new_status,
+                reason=proposal.reason,
+                evidence=proposal.evidence,
+            )
+
+        return {"session": session}
+
     builder = StateGraph(ExplorationState)
+
     builder.add_node("explore_images", explore_images)
     builder.add_node("explore_hypotheses", explore_hypotheses)
+    builder.add_node("revise_hypotheses", revise_hypotheses)
     builder.add_node("ask_question", ask_question)
 
     builder.add_edge(START, "explore_images")
-    builder.add_edge("explore_images", "explore_hypotheses")
+    builder.add_conditional_edges("explore_images", route_after_images)
+
     builder.add_edge("explore_hypotheses", "ask_question")
+    builder.add_edge("revise_hypotheses", "ask_question")
     builder.add_edge("ask_question", END)
 
     return builder.compile()

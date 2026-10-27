@@ -5,7 +5,7 @@ from pathlib import Path
 from musecapsule.llm import request_generation
 from musecapsule.models import Intent, Message
 from musecapsule.state import SessionState
-from musecapsule.workflow import build_initial_exploration_graph
+from musecapsule.workflow import build_exploration_graph
 
 def main() -> None:
     """Run an initial exploration through the compiled workflow."""
@@ -44,7 +44,8 @@ def main() -> None:
 
         return generate
 
-    graph = build_initial_exploration_graph(
+    graph = build_exploration_graph(
+        generate_revisions=create_generator("hypothesis_revisions.md"),
         generate_images=create_generator("metaphor_explorer.md"),
         generate_hypotheses=create_generator("hypothesis_proposals.md"),
         generate_question=create_generator("imagination_guide.md"),
@@ -68,6 +69,22 @@ def main() -> None:
         }
     )
     updated_session = result["session"]
+
+    clarification = Message(
+        role="user",
+        text=(
+            "The capsule is opaque, not transparent. "
+            "Nobody can see the note or anything happening inside."
+        ),
+    )
+
+    continuation = graph.invoke(
+        {
+            "session": updated_session,
+            "incoming_message": clarification,
+        }
+    )
+    updated_session = continuation["session"]
 
     print(updated_session.model_dump_json(indent=2))
 
