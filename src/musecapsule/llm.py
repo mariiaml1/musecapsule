@@ -3,21 +3,22 @@ import subprocess
 from pathlib import Path
 
 
-def request_image_extraction(
+def request_generation(
     text: str,
     devkit_dir: Path,
     *,
     instructions: str,
     model: str,
 ) -> str:
-    """Request image extraction through the local ChatGPT bridge.
+    """Generate text through the local ChatGPT bridge.
 
-    Return the raw model response for separate validation.
+    Return the raw model response for task-specific validation.
 
     Raises:
         ValueError: If the input text is blank.
         RuntimeError: If the bridge cannot complete the request.
     """
+
     if not text.strip():
         raise ValueError("Request text must not be blank.")
 

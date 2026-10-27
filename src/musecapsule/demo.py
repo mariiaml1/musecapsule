@@ -4,14 +4,16 @@ from pathlib import Path
 from musecapsule.agents.metaphor_explorer import (
     parse_image_extraction,
     propose_hypotheses,
+    propose_hypothesis_revisions,
 )
-from musecapsule.llm import request_image_extraction
+from musecapsule.llm import request_generation
 from musecapsule.models import Intent, Message
 from musecapsule.state import (
     SessionState,
     append_hypothesis,
     append_image_fragment,
     append_message,
+    revise_hypothesis_status,
 )
 
 def main() -> None:
@@ -48,7 +50,7 @@ def main() -> None:
     prompt_path = Path(__file__).resolve().parent / "prompts" / "metaphor_explorer.md"
     instructions = prompt_path.read_text(encoding="utf-8")
 
-    raw_response = request_image_extraction(
+    raw_response = request_generation(
         text=message.text,
         devkit_dir=args.devkit_dir,
         instructions=instructions,
@@ -70,7 +72,7 @@ def main() -> None:
 
     def generate_hypotheses(context: str) -> str:
         """Send hypothesis context through the configured local bridge."""
-        return request_image_extraction(
+        return request_generation(
             text=context,
             devkit_dir=args.devkit_dir,
             instructions=hypothesis_instructions,
@@ -86,6 +88,48 @@ def main() -> None:
 
     for hypothesis in hypotheses:
         state = append_hypothesis(state, hypothesis)
+
+    clarification = Message(
+        role="user",
+        text=(
+            "The capsule is opaque, not transparent. "
+            "Nobody can see the note or anything happening inside."
+        ),
+    )
+    state = append_message(state, clarification)
+
+    revision_prompt_path = (
+        Path(__file__).resolve().parent / "prompts" / "hypothesis_revisions.md"
+    )
+    revision_instructions = revision_prompt_path.read_text(
+        encoding="utf-8",
+    )
+
+    def generate_revisions(context: str) -> str:
+        """Request hypothesis revisions through the configured bridge."""
+        return request_generation(
+            text=context,
+            devkit_dir=args.devkit_dir,
+            instructions=revision_instructions,
+            model=args.model,
+        )
+
+    revisions = propose_hypothesis_revisions(
+        state.intent,
+        hypotheses=state.hypotheses,
+        messages=state.messages,
+        clarification=clarification,
+        generate=generate_revisions,
+    )
+
+    for proposal in revisions:
+        state = revise_hypothesis_status(
+            state,
+            proposal.hypothesis_id,
+            new_status=proposal.new_status,
+            reason=proposal.reason,
+            evidence=proposal.evidence,
+        )
 
     print(state.model_dump_json(indent=2))
 

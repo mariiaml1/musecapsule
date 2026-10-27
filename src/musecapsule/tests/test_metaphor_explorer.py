@@ -2,15 +2,19 @@ import json
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from musecapsule.agents.metaphor_explorer import (
+    ProposedHypothesisRevision,
     build_hypothesis_context,
     extract_images,
     parse_hypothesis_proposals,
+    parse_hypothesis_revisions,
     parse_image_extraction,
     propose_hypotheses,
+    propose_hypothesis_revisions,
 )
-from musecapsule.models import EvidenceRef, ImageFragment, Intent, Message
+from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
 
 def test_parse_image_extraction_returns_grounded_images():
     message = Message(
@@ -262,6 +266,137 @@ def test_propose_hypotheses_skips_generation_without_images():
         Intent(goal="Build an AI portfolio project"),
         images=[],
         messages=[],
+        generate=generate,
+    )
+
+    assert result == []
+
+
+@pytest.mark.parametrize("reason", ["", " ", "\t\n"])
+def test_proposed_hypothesis_revision_rejects_blank_reason(reason):
+    with pytest.raises(ValidationError):
+        ProposedHypothesisRevision(
+            hypothesis_id=uuid4(),
+            new_status="unsupported",
+            reason=reason,
+            evidence=[
+                EvidenceRef(
+                    message_id=uuid4(),
+                    quote="The note cannot be selected",
+                )
+            ],
+        )
+
+
+def test_parse_hypothesis_revisions_accepts_grounded_clarification():
+    image_id = uuid4()
+    message = Message(
+        role="user",
+        text="The note cannot be selected.",
+    )
+    original_message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=original_message.id,
+        quote="A golden note",
+    )
+
+    hypothesis = Hypothesis(
+        statement="The note may represent a selectable idea.",
+        image_ids=[image_id],
+        evidence=[source],
+    )
+
+    raw_response = json.dumps(
+        {
+            "revisions": [
+                {
+                    "hypothesis_id": str(hypothesis.id),
+                    "new_status": "unsupported",
+                    "reason": "The user clarified that the note cannot be selected.",
+                    "evidence": [
+                        {
+                            "message_id": str(message.id),
+                            "quote": "The note cannot be selected",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    payload = parse_hypothesis_revisions(
+        raw_response, hypotheses=[hypothesis], message=message
+    )
+
+    assert len(payload) == 1
+    assert payload[0].evidence[0].quote == "The note cannot be selected"
+    assert payload[0].hypothesis_id == hypothesis.id
+    assert payload[0].new_status == "unsupported"
+    assert payload[0].evidence[0].message_id == message.id
+
+
+def test_parse_hypothesis_revisions_rejects_fabricated_quote():
+    image_id = uuid4()
+    message = Message(
+        role="user",
+        text="The note cannot be selected.",
+    )
+    original_message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=original_message.id,
+        quote="A golden note",
+    )
+
+    hypothesis = Hypothesis(
+        statement="The note may represent a selectable idea.",
+        image_ids=[image_id],
+        evidence=[source],
+    )
+
+    raw_response = json.dumps(
+        {
+            "revisions": [
+                {
+                    "hypothesis_id": str(hypothesis.id),
+                    "new_status": "unsupported",
+                    "reason": "The user clarified that the note cannot be selected.",
+                    "evidence": [
+                        {
+                            "message_id": str(message.id),
+                            "quote": "Some text",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(
+        ValueError, match="Evidence quote was not found in the message."
+    ):
+        parse_hypothesis_revisions(
+            raw_response, hypotheses=[hypothesis], message=message
+        )
+
+
+def test_propose_hypothesis_revisions_skips_generation_without_hypotheses():
+    def generate(_: str) -> str:
+        pytest.fail("Generation must not run without hypotheses.")
+
+    result = propose_hypothesis_revisions(
+        Intent(goal="Build an AI portfolio project"),
+        hypotheses=[],
+        messages=[],
+        clarification=Message(
+            role="user",
+            text="The note cannot be selected.",
+        ),
         generate=generate,
     )
 

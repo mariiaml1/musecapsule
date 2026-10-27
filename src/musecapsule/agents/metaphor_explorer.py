@@ -1,7 +1,8 @@
 import json
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from musecapsule.evidence import validate_evidence
 from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
@@ -199,4 +200,124 @@ def propose_hypotheses(
         raw_response,
         images=images,
         messages=messages,
+    )
+
+
+class ProposedHypothesisRevision(BaseModel):
+    """A model-proposed status change awaiting application validation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hypothesis_id: UUID
+    new_status: Literal["supported", "unsupported"]
+    reason: str = Field(min_length=1)
+    evidence: list[EvidenceRef] = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def reject_blank_reason(cls, value: str) -> str:
+        """Reject blank reasons while preserving their original text."""
+        if not value.strip():
+            raise ValueError("Revision reason must not be blank.")
+        return value
+
+
+class HypothesisRevisionResponse(BaseModel):
+    """The expected JSON response for proposed hypothesis revisions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revisions: list[ProposedHypothesisRevision] = Field(max_length=3)
+
+
+def parse_hypothesis_revisions(
+    raw_response: str,
+    *,
+    hypotheses: list[Hypothesis],
+    message: Message,
+) -> list[ProposedHypothesisRevision]:
+    """Validate revision proposals against hypotheses and a new user message.
+
+    Require every proposal to cite the supplied clarification.
+    Keep session updates separate from response validation.
+
+    Raises:
+        ValueError: If the response, status transition or evidence is invalid.
+    """
+    if message.role != "user":
+        raise ValueError("Message is not from the user.")
+
+    parsed = HypothesisRevisionResponse.model_validate_json(raw_response)
+    hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in hypotheses}
+    seen_ids: set[UUID] = set()
+
+    for proposal in parsed.revisions:
+        hypothesis = hypotheses_by_id.get(proposal.hypothesis_id)
+
+        if hypothesis is None:
+            raise ValueError("Hypothesis is missing.")
+
+        if proposal.hypothesis_id in seen_ids:
+            raise ValueError("Duplicate hypothesis revision.")
+
+        if hypothesis.status == "superseded":
+            raise ValueError("Cannot revise a superseded hypothesis.")
+
+        if hypothesis.status == proposal.new_status:
+            raise ValueError("Hypothesis status is unchanged.")
+
+        for evidence in proposal.evidence:
+            validate_evidence(evidence, message)
+
+        seen_ids.add(proposal.hypothesis_id)
+
+    return parsed.revisions
+
+
+def propose_hypothesis_revisions(
+    intent: Intent,
+    *,
+    hypotheses: list[Hypothesis],
+    messages: list[Message],
+    clarification: Message,
+    generate: Callable[[str], str],
+) -> list[ProposedHypothesisRevision]:
+    """Generate grounded status revisions after a user clarification.
+
+    Include narrative context and require evidence from the clarification.
+    Return validated proposals without changing session state.
+
+    Raises:
+        ValueError: If the clarification or model response is invalid.
+    """
+    if clarification.role != "user":
+        raise ValueError("Message is not from the user.")
+
+    revisable = [
+        hypothesis for hypothesis in hypotheses if hypothesis.status != "superseded"
+    ]
+    if not revisable:
+        return []
+
+    context = json.dumps(
+        {
+            "intent": intent.model_dump(mode="json"),
+            "messages": [
+                message.model_dump(mode="json")
+                for message in messages
+                if message.role == "user" and message.id != clarification.id
+            ],
+            "hypotheses": [
+                hypothesis.model_dump(mode="json") for hypothesis in revisable
+            ],
+            "clarification": clarification.model_dump(mode="json"),
+        },
+        ensure_ascii=False,
+    )
+    raw_response = generate(context)
+
+    return parse_hypothesis_revisions(
+        raw_response,
+        hypotheses=revisable,
+        message=clarification,
     )
