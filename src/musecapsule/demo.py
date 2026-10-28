@@ -9,6 +9,7 @@ from musecapsule.state import SessionState
 from musecapsule.storage import SessionStore
 from musecapsule.workflow import build_exploration_graph
 
+
 def main() -> None:
     """Run an initial exploration through the compiled workflow."""
 
@@ -41,7 +42,64 @@ def main() -> None:
         "--message",
         help="Continue the restored session with a new narrative message.",
     )
+    parser.add_argument(
+        "--goal",
+        help="Start a session with an explicit user goal.",
+    )
+    parser.add_argument(
+        "--constraint",
+        action="append",
+        default=[],
+        help="A user constraint. Repeat this option for multiple constraints.",
+    )
+    parser.add_argument(
+        "--generate-ideas",
+        action="store_true",
+        help="Generate ideas for a restored session instead of exploring.",
+    )
+    parser.add_argument(
+        "--select-idea",
+        type=UUID,
+        help="Select an existing idea in a restored session.",
+    )
+    parser.add_argument(
+        "--build-blueprint",
+        action="store_true",
+        help="Generate a blueprint for the selected idea.",
+    )
     args = parser.parse_args()
+
+    if args.generate_ideas:
+        action_count = sum(
+            (
+                args.message is not None,
+                args.generate_ideas,
+                args.select_idea is not None,
+                args.build_blueprint,
+            )
+        )
+
+        if action_count > 1:
+            parser.error("Choose only one action per invocation.")
+
+        if action_count and args.session_id is None:
+            parser.error("Session actions require --session-id.")
+
+        if args.message is not None:
+            parser.error("--generate-ideas cannot be combined with --message.")
+
+    if args.goal is not None:
+        if args.session_id is not None:
+            parser.error("--goal cannot be combined with --session-id.")
+
+        if not args.goal.strip():
+            parser.error("--goal must not be blank.")
+
+    if args.constraint and args.goal is None:
+        parser.error("--constraint requires --goal.")
+
+    if any(not value.strip() for value in args.constraint):
+        parser.error("--constraint must not be blank.")
 
     if args.message is not None:
         if args.session_id is None:
@@ -99,7 +157,83 @@ def main() -> None:
             restored = result["session"]
             store.save(restored)
 
+        if args.generate_ideas:
+            result = graph.invoke(
+                {
+                    "session": restored,
+                    "command": "generate_ideas",
+                }
+            )
+            updated = result["session"]
+            store.save(updated)
+
+            new_ideas = updated.ideas[len(restored.ideas) :]
+            restored = updated
+
+            print("\nGenerated ideas:")
+            for idea in new_ideas:
+                print(f"\n{idea.title}")
+                print(f"ID: {idea.id}")
+                print(idea.description)
+
+        if args.select_idea is not None:
+            result = graph.invoke(
+                {
+                    "session": restored,
+                    "command": "select_idea",
+                    "idea_id": args.select_idea,
+                }
+            )
+            updated = result["session"]
+
+            if updated.revision != restored.revision:
+                store.save(updated)
+
+            restored = updated
+
+        if args.build_blueprint:
+            result = graph.invoke(
+                {
+                    "session": restored,
+                    "command": "build_blueprint",
+                }
+            )
+            restored = result["session"]
+            store.save(restored)
+
         print(restored.model_dump_json(indent=2))
+        return
+
+    if args.goal is not None:
+        narrative = input("Describe your imagined scene: ")
+
+        if not narrative.strip():
+            parser.error("The narrative must not be blank.")
+
+        session = SessionState(
+            intent=Intent(
+                goal=args.goal,
+                constraints=args.constraint,
+            ),
+        )
+        store.save(session)
+        print(f"Session ID: {session.id}", flush=True)
+
+        result = graph.invoke(
+            {
+                "session": session,
+                "command": "explore",
+                "incoming_message": Message(
+                    role="user",
+                    text=narrative,
+                ),
+            }
+        )
+        updated_session = result["session"]
+        store.save(updated_session)
+
+        print(f"\n{updated_session.messages[-1].text}")
+        print(f"Saved revision: {updated_session.revision}")
         return
 
     session = SessionState(
