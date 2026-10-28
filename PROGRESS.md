@@ -1,108 +1,109 @@
 # Development Progress
 
-Updated: 2026-10-25. Companion document: [ARCHITECTURE.md](ARCHITECTURE.md).
+Updated: 2026-10-28. Code baseline reviewed: `3ad26c9934f8c3887c2b670ba45f7a5cfdae7b41` (`feat: build metaphor-grounded MVP briefs with Idea Architect`).
+See [ARCHITECTURE.md](ARCHITECTURE.md). This documentation update changes no code/tests. Tests were inspected, not rerun here; no pass count is claimed.
 
-## Evidence and current checkpoint
+## Current checkpoint
 
-Inspected GitHub repository: `mariiaml1/musecapsule`, master at `ee5d2b8809c0ec9ef0981003a4f7e5fbd4985f88` (`feat: track hypothesis status revisions with evidence`).
-This documentation update changes no application code or tests. Tests were read, not executed during this documentation task.
+The first CLI vertical slice across four AI roles is implemented:
+narrative → grounded images → hypotheses → clarification/revision → ideas → explicit user selection → metaphor-grounded MVP brief.
 
-The repository is behind the latest conversation. Do not assume chat examples have been committed or that the latest tests passed. The local Mac working tree was not accessible.
+The author supplied successful live output selecting Hidden Melody. Its brief preserved the opaque-capsule correction through a conceal-then-reveal learning mechanic, linked the selected idea and source images, copied user constraints and kept user_confirmed=False. Revision 14 was consistent with that particular run. This is one observed example, not proof of general quality.
 
-Current milestone: finish the Metaphor Explorer hypothesis proposal path, then demonstrate live image extraction followed by grounded hypotheses. There is no LangGraph workflow yet.
+The CLI still uses scripted narrative and clarification text. It is not yet a complete free-form application, and sessions do not survive process exit.
 
-## Implemented in the inspected repository
+## Implemented
 
-- Python/Pydantic src-layout project with pytest and Ruff configuration.
-- Intent, Message, EvidenceRef, ImageFragment, Hypothesis and HypothesisRevision.
-- SessionState; message/image/hypothesis append operations; explicit status revision with previous-version history.
-- Exact user-source validation.
-- Image extraction response parsing and injectable `extract_images`.
-- Local Electron/ChatGPT bridge, configurable model, raw response transport and error handling.
-- CLI demo for one narrative, validated images and JSON state output.
-- README setup instructions with a pinned external DevKit revision.
+- Python 3.13 project with Pydantic, pytest, Ruff and LangGraph dependencies.
+- Original-text/evidence preservation and exact quote validation.
+- Image extraction, grounded hypotheses and model-proposed revisions with historical snapshots.
+- Imagination Guide, product idea generation, deterministic idea selection.
+- Idea Architect response contracts, origin validation and generation without search.
+- MetaphorOrigin separates proposed meaning from mechanics and user confirmation.
+- MVPBrief stores functional scope and observable readiness criteria; constraints may be empty.
+- SessionState.briefs retains prior generated versions.
+- LangGraph commands: explore, generate_ideas, select_idea, build_blueprint.
+- Injected generation and generic request_generation transport through the local Electron bridge.
+- Independent Tavily adapter, explicit search outcomes and standalone search demo.
+- Author verified a real Tavily search after installing Python's macOS certificates.
 
-The author previously supplied successful live image-extraction output. Image boundaries varied (one combined image versus two objects); this is not a quality guarantee.
+## Tests present
 
-## Tests present in the repository
+Paths: `src/musecapsule/tests/`. External generation/network calls are substituted in automated tests.
 
-All test paths are under `src/musecapsule/tests/`.
-
-| File | Coverage observed |
+| File | Coverage |
 | --- | --- |
-| test_models.py | Goal/constraint validation; message whitespace preservation and blank rejection; evidence quotes, IDs and user role; image labels/evidence; hypothesis default status, blank statement and required sources |
-| test_state.py | Preserve previous state and increment revisions; reject duplicate messages/images/hypotheses; invalid/missing image evidence; missing hypothesis images and invalid quotes; reject non-proposed hypotheses; revision history and clarification evidence; invalid revision data and unchanged status |
-| test_metaphor_explorer.py | Grounded image extraction, unique IDs, fabricated quote rejection, empty images, generation input, assistant rejection before generation |
-| test_llm.py | Mocked subprocess timeout and nonzero process exit |
+| test_models.py | Intent/message/evidence/image/hypothesis validation; brief list items; external-check outcomes; default unconfirmed meaning |
+| test_state.py | Append operations, source checks, previous-state preservation, hypothesis revision history; idea batches; idea selection/no-op; blueprint version preservation |
+| test_metaphor_explorer.py | Grounded extraction/proposals, fabricated quotes, unknown image, context, role validation and revision parsing |
+| test_imagination_guide.py | Blank question rejection |
+| test_idea_evolution.py | Idea count, grounded parsing, inactive hypothesis rejection, missing-image generation guard |
+| test_idea_architect.py | Reject model-assigned confirmation; reject unrelated origin; preserve intent/origin; pass clarification context |
+| test_workflow.py | Initial step order; revision turn; ideas without exploration; selection without generation; brief for selected idea |
+| test_search.py | Missing key without network; results with sources and request limits; HTTP failure without retry |
+| test_llm.py | Mocked bridge timeout and process failure |
 
-Evidence tests are in test_models.py; no separate test_evidence.py was found at the inspected path. These are deterministic tests, not LLM quality evaluations. No new test-pass count is claimed.
+These tests do not establish creative quality. Manual rubric: goal relevance, diversity, metaphor linkage and feasibility. Additional checks: one open non-leading question, chronology respected, no invented user preferences or external verification.
 
-## Newer local work from the conversation
+The proposed different-idea blueprint rejection test was not found in the inspected test_state.py. Do not describe it as implemented.
 
-**User-shared code, absent from inspected master:**
-- `parse_hypothesis_proposals` validates each image reference and each source quote, and creates application-owned Hypothesis IDs/statuses.
-- Three proposal tests were shared: grounded result, fabricated quote, unknown image.
-- Review corrections requested: keep the existing image valid in the fabricated-quote test; use one valid plus one unknown image ID to catch an incorrect any() check.
-- The final shared parser still included redundant validation of existing image evidence; removal was requested.
+## Accepted direction
 
-**Assigned examples, completion not confirmed:**
-- ProposedHypothesis and HypothesisProposalResponse contracts.
-- `build_hypothesis_context` and its goal/source preservation test.
-- `propose_hypotheses`, injected generation, empty-image shortcut and its test.
-- `prompts/hypothesis_proposals.md`.
-- `Field(max_length=3)` on the proposal response list.
+The fourth role is **Idea Architect**, replacing Reality Check as the product-level description. It helps implement the user's chosen idea rather than replacing it with an internet result.
 
-Inspect the local files before adding or rewriting any of these.
+- Build My Idea is the primary path and needs no Tavily call.
+- Explore Existing Solutions will be optional, explicitly requested and bounded.
+- Metaphors can shape mechanics rather than visual decoration.
+- Narrative support status is separate from user confirmation.
+- Ideas with no hypothesis references remain valid; their proposed meaning is unconfirmed.
+- Do not require selected_meaning_ids before creating a draft. That earlier proposal was not implemented.
+- Keep the existing search adapter. Do not create artificial tool calls merely to label the system agentic.
 
-## Known issues and verification gaps
+## Remaining limitations
 
-1. **Committed defect:** in `append_image_fragment`, missing-message checking and `validate_evidence` are outside the evidence loop, so only the final reference is checked. Existing negative tests put invalid evidence last and do not expose an invalid-first/valid-last case. Fix separately; do not mark resolved without inspecting the local version.
-2. README says the SDK's first model is used, but the committed bridge selects request.model. Correct documentation later.
-3. Exact quotes and existing IDs do not prove that a hypothesis follows from its sources.
-4. No persistence, complete dialogue loop, model-driven revision, search, graph, API or UI.
-5. No retry policy, turn idempotency, atomic persistence or token/latency telemetry. Repeated LLM calls can create new IDs for equivalent results.
-6. Source-checkout paths are assumed for prompts and bridge; packaged distribution is not established.
+- No suggested_architecture contract yet: the output is a functional MVP brief, not a detailed technical architecture.
+- No explicit meaning confirmation, edited-brief command, persistent sessions, checkpointer, API or UI.
+- No graph research command, stored external checks or research block in briefs.
+- Historical image descriptions coexist; no entity merging or current-image status. Later messages must override earlier properties in prompts.
+- Existing hypotheses route subsequent exploration to revision, not additional hypothesis generation.
+- append_blueprint checks selection and constraints; detailed origin integrity is enforced by the parser, not all direct state-operation calls.
+- References and exact quotes cannot validate semantic reasoning.
+- Numeric acceptance thresholds generated by the model are provisional recommendations, not proven requirements. Explicit labeling was discussed but not implemented.
+- Versions lack timestamps/source revisions; stored briefs are not automatically marked stale after later corrections.
+- No retry/idempotency/turn-atomicity policy or token/latency telemetry. Source-checkout prompt/bridge packaging remains a limitation.
+- workflow.py registers build_blueprint → END twice; redundant, not two executions. No explicit ask_question → END edge is present. Review graph structure separately; this documentation task does not alter it.
+- Earlier append_image_fragment evidence-loop indentation defect is fixed in the inspected code.
 
-## Next concrete step
+## Next concrete iteration
 
-First reconcile the author's local changes with this baseline and resolve/verify the image-evidence loop defect with an invalid-first/valid-last regression test.
+**Add optional high-level architecture components to MVPBrief and BlueprintResponse.**
 
-Then resume exactly at the paused feature: **wire hypothesis proposals into demo.py after image extraction**.
+1. Define a small component contract: name, responsibility, optional technology recommendation.
+2. Allow an empty architecture list when a technical decomposition is not useful.
+3. Pass validated components through parse_blueprint_response.
+4. Update the Architect prompt: preserve the selected mechanics; keep technology suggestions provisional; do not invent verified versions or user constraints.
+5. Add targeted parser/contract tests and run the suite. A new live call is useful only to assess the added output.
+6. Review and commit the completed change.
 
-1. Confirm the proposal parser, context builder, wrapper and prompt exist locally and their tests pass.
-2. Keep image and hypothesis prompts separate. Configure a hypothesis generation callable using the existing transport's instructions/model arguments.
-3. Pass state.intent, state.images and state.messages to `propose_hypotheses`.
-4. Apply returned hypotheses with `append_hypothesis`; print the resulting state.
-5. Run deterministic tests, then one live demo. Check existing image/message IDs, exact quotes and proposed statuses. An empty hypothesis list is valid.
-6. Review changes and commit the completed milestone; update these documents to remove uncertainty.
+Then prioritize SQLite save/reopen and a real input loop/API before expanding the product. Optional research remains a separate later feature, not a prerequisite for blueprints.
 
-The extraction-specific transport name may be renamed when reused for proposals; this is a small naming change to discuss, not an already implemented adapter.
+## Working agreement and commands
 
-## Remaining MVP milestones
+Communicate in Russian; code, comments and docs in English. Masha implements small steps; explain purpose, review changes and commit completed milestones. Inspect actual code before assuming suggested snippets exist. No full repository generation.
 
-1. Complete and evaluate live hypothesis proposals and model-driven revisions.
-2. Add Imagination Guide and a bounded LangGraph flow for an adaptive user turn.
-3. Add Idea Evolution, selection and traceable idea contracts.
-4. Add Reality Check with one bounded search tool, citations and honest unavailable handling; produce MVP brief.
-5. Persist/reopen sessions in SQLite; expose FastAPI and minimal React/TypeScript UI.
-6. Add error/step/tool budgets, safe observability, targeted integration tests and LLM evaluation.
-7. Reproducible setup, Docker and GitHub Actions after the core scenario works.
+Use imports from musecapsule, never src.musecapsule. Keep tests under src/musecapsule/tests.
 
-MVP acceptance: create an intent/constraint session, explore images through one-question turns, revise interpretations after clarification, request 2–3 traceable ideas at any time, select one, produce a brief, save and resume. Search facts require sources; failed/unavailable search must be explicit.
+From the project root, in the activated environment:
 
-Manual creative-quality rubric: goal relevance, diversity, metaphor linkage and feasibility. Use examples such as the scheduled feeder to evaluate revision; never hardcode their outcomes. Do not score objective genius or claim novelty/demand without evidence.
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m musecapsule.demo --devkit-dir ../sign-in-with-chatgpt-devkit --model gpt-6.1-sol
+python -m musecapsule.search_demo
+```
 
-## Resume instructions for a new Work chat
+The main demo consumes model allowance and asks for an idea number. The search demo uses TAVILY_API_KEY from the current terminal; never print or commit the key.
 
-- Communicate in Russian; code, comments and project documentation in English.
-- Masha implements small iterations; explain the engineering reason, review her code, and avoid generating the entire project.
-- Preserve the four-role LangGraph learning goal. No need to turn every LLM call into a separate agent.
-- Read actual local/remote code before assuming that an assigned snippet is implemented.
-- Keep tests in `src/musecapsule/tests/`; import `musecapsule`, never `src.musecapsule`.
-- Follow README for installation. From the project root:
-  `python -m pytest`
-  and, separately, the live command
-  `python -m musecapsule.demo --devkit-dir ../sign-in-with-chatgpt-devkit --model gpt-6.1-sol`.
-- Live calls require the author's configured local connection and consume account allowance.
-- The SHA `0a36fefeb913055c8c7a1a29b63d82b96b2e841a` pins the external DevKit, not MuseCapsule.
-- Keep secrets/private stories out of Git; remind the author to commit completed milestones.
+The DevKit pin `0a36fefeb913055c8c7a1a29b63d82b96b2e841a` belongs to the external DevKit, not MuseCapsule. macOS python.org installations may require /Applications/Python 3.13/Install Certificates.command for HTTPS. Keep TLS verification enabled.
+
+Update these two documents after significant milestones so a new Work chat can resume from the actual code.

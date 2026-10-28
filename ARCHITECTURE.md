@@ -1,100 +1,97 @@
 # Architecture
 
-Snapshot: 2026-10-25. Repository baseline inspected: `ee5d2b8809c0ec9ef0981003a4f7e5fbd4985f88` (master).
-Repository code is distinguished below from newer code shared in the development conversation. The author's local working tree was not inspected.
+Updated: 2026-10-28. Code inspected at `3ad26c9934f8c3887c2b670ba45f7a5cfdae7b41` on master. This is a source review, not a fresh test run.
 
-## Product and boundaries
+## Product principles
 
-MuseCapsule combines an explicit user goal and constraints with freely narrated images to develop traceable product ideas and an MVP brief. It does not discover hidden desires or assign objective psychological meanings to symbols.
+MuseCapsule is an AI Imagination Engine:
+user goal + constraints + spontaneous metaphors → image exploration → meaning hypotheses → product ideas → engineering blueprint.
 
-Target flow: intent and constraints → narrative → adaptive exploration → 2–3 grounded ideas → selected idea → MVP brief. Dream Mode explores without premature critique; Reality Mode considers usefulness, constraints and similar solutions. The user can request ideas at any time. Ask one open, non-leading question per turn.
+The user supplies a conscious goal. Interpretations are creative proposals, not hidden desires or objective psychological meanings. A metaphor may become product behavior rather than literal visual styling. Preserve the selected idea instead of replacing it with a conventional SaaS concept or an internet result.
 
-ChaosCat is a separate project. Its scheduled-feeder story is a possible revision/evaluation scenario, not a hardcoded output.
+ChaosCat is a separate project and a useful evaluation example: scheduled feeding should undermine a broken-feeder assumption. Its output is not hardcoded.
 
-## Implemented repository components
+## Components and boundaries
 
-Paths below are relative to `src/musecapsule/`, except the bridge.
+All Python paths below are relative to `src/musecapsule/`.
 
 | Component | Responsibility |
 | --- | --- |
-| `models.py` | Pydantic domain contracts; application-generated entity IDs |
-| `evidence.py` | Validate message ID, user role and exact source substring |
-| `state.py` | SessionState and explicit append/revision operations |
-| `agents/metaphor_explorer.py` | Image response contracts, parsing and injectable generation |
-| `prompts/metaphor_explorer.md` | Image extraction instructions |
-| `llm.py` | Synchronous subprocess transport; return raw text or raise an error |
-| `bridge/chatgpt.cjs` | Electron authorization, encrypted credentials and SDK inference |
-| `demo.py` | Single-message CLI image extraction and state JSON output |
-| `tests/` | Deterministic pytest checks, including mocked transport failures |
+| models.py | Pydantic domain models and validation |
+| evidence.py | User-message identity, role and exact quote checks |
+| state.py | Validated append, revision and selection operations |
+| agents/metaphor_explorer.py | Extract images; propose hypotheses and status revisions |
+| agents/imagination_guide.py | Generate one exploration question |
+| agents/idea_evolution.py | Generate 2–3 ideas and validate sources |
+| agents/idea_architect.py | Generate and validate a metaphor-grounded MVP brief |
+| prompts/ | Separate task instructions |
+| workflow.py | LangGraph nodes and deterministic command routing |
+| llm.py | request_generation: synchronous transport, raw response and error handling |
+| bridge/chatgpt.cjs (repository root) | Electron/ChatGPT connection and encrypted credentials |
+| search.py | Standalone bounded Tavily adapter |
+| demo.py | Scripted two-turn exploration, ideas, interactive selection, brief |
+| search_demo.py | Independent manual search check |
+| tests/ | Unit and workflow integration tests using substituted external generation |
 
-The demo currently calls transport and `parse_image_extraction` directly; `extract_images` exists but is not yet used by the committed demo.
+Each AI function accepts a generation callable. Providers do not mutate domain state. Parsers validate model proposals; state operations apply accepted changes. LangGraph controls execution. Model decisions include hypotheses, their revisions and question content; command routing is currently deterministic, not a model-based supervisor.
 
-## Data contracts
+## Domain contracts
 
-| Model | Main fields and meaning |
+| Model | Meaning |
 | --- | --- |
-| Intent | goal, constraints; explicit user direction |
-| Message | UUID, user/assistant role, original text |
-| EvidenceRef | message_id, exact quote; no inferred meaning |
-| ImageFragment | UUID, label, nonempty evidence; extracted narrative content |
-| Hypothesis | UUID, statement, status, nonempty image_ids and evidence; tentative interpretation |
-| HypothesisRevision | deep-copied previous hypothesis, new_status, reason, new evidence, session_revision |
-| SessionState | UUID, intent, messages, images, hypotheses, hypothesis_history, revision |
+| Intent | Explicit goal and optional user constraints |
+| Message | UUID, role, original text |
+| EvidenceRef | Message UUID and exact source substring |
+| ImageFragment | Application UUID, label, nonempty evidence |
+| Hypothesis | Interpretation, image/evidence references, proposed/supported/unsupported/superseded status |
+| HypothesisRevision | Previous snapshot, new status, reason, evidence and session revision |
+| ProductIdea | UUID, title, description, goal_alignment, image_ids and optional hypothesis_ids |
+| MetaphorOrigin | Source IDs, meaning_basis, mechanic_mapping, user_confirmed |
+| MVPBrief | idea_id, idea_summary, metaphor_origin, problem, audience, core_scenario, up to five features, constraints, risks, acceptance_criteria |
+| SimilarSolution / ExternalCheck | Provider result title/URL/snippet and not_run/completed/unavailable outcome |
 
-Message text and source quotes preserve whitespace. Nonblank labels/statements are validated separately. Pydantic shape validation does not itself establish referential integrity.
+Supported means supported by the narrative, not user-selected for implementation or externally proven. There is no explicit meaning-confirmation feature. Idea Architect assigns user_confirmed=False; selecting an idea does not confirm its interpretation.
 
-Hypothesis statuses: proposed, supported, unsupported, superseded. New hypotheses are appended only as proposed. The implemented revision operation accepts supported/unsupported, rejects unchanged or superseded inputs, appends evidence, and records the previous version. No superseding operation exists yet. Supported means supported within the narrative, not externally established fact.
+SessionState stores ID, intent, messages, revision, images, hypotheses, hypothesis_history, ideas, selected_idea_id and briefs. Briefs are appended as versions; there are no per-version IDs, timestamps or source revision metadata yet. No external_checks or selected_meaning_ids fields exist.
 
-State functions return a new SessionState and increment revision per operation, not per dialogue turn. They preserve the incoming state during the operation, but shared nested objects are not globally immutable. Explicit constructors must carry every state field forward. See PROGRESS.md for the known image-evidence validation defect.
+Operations return new states, with revision per accepted operation rather than per dialogue turn. Same-idea selection is a no-op. Nested objects are not globally immutable; explicit constructors must preserve every field.
 
-## Metaphor Explorer
+## Four-role flow
 
-Implemented image path:
+Metaphor Explorer validates extraction quotes and assigns application IDs. Hypothesis proposals validate source IDs and quotes. Revision proposals cite the incoming clarification, reject duplicate targets and invalid transitions, and preserve prior hypotheses in history.
 
-1. `extract_images(message, *, generate)` rejects assistant input before generation.
-2. `generate(message.text)` returns raw model text.
-3. `parse_image_extraction(raw_response, message)` parses ImageExtractionResponse.
-4. Each ExtractedImage supplies label and quote; Python validates the quote and assigns IDs and message references.
-5. The caller applies returned ImageFragments through state operations.
+Imagination Guide receives dialogue, images and hypotheses, including corrections. The schema enforces one nonblank question string; openness, lack of leading options and semantic correctness require evaluation.
 
-ExtractedImage and ImageExtractionResponse forbid extra fields. Empty image lists are valid. Images are not merged by label.
+Idea Evolution receives intent, dialogue, images and proposed/supported hypotheses. It validates source references and generates 2–3 ideas; hypotheses may be omitted. Invalid batches are not accepted by the state operation.
 
-### Newer conversation work, absent from the inspected commit
+Idea Architect receives the selected idea, linked images/hypotheses, full dialogue and intent. Related inactive hypotheses remain contextual warnings but cannot be cited as foundations. The parser requires origins to exist and belong to the selected idea. Application code assigns idea_id, copies constraints from Intent and sets user_confirmed=False. The model cannot assign these fields in BlueprintResponse. A brief can be generated without hypotheses or external research.
 
-- User shared `parse_hypothesis_proposals(raw_response, *, images, messages)`: validates every proposed image ID and evidence reference before returning Hypothesis objects. IDs and proposed status come from Python.
-- Latest shared parser still revalidated all input image evidence; removing that redundant loop was requested but not confirmed.
-- ProposedHypothesis / HypothesisProposalResponse were supplied as contracts: statement, image_ids, evidence, wrapped in hypotheses. Their actual local definitions were not inspected.
-- `build_hypothesis_context` was supplied: serialize intent, user messages and images with existing IDs.
-- `propose_hypotheses(..., generate)`, an empty-image shortcut, `prompts/hypothesis_proposals.md`, and a maximum of three proposals were assigned most recently; implementation/test completion was not confirmed.
+Exact provenance checks do not prove semantic entailment, novelty, demand or feasibility.
 
-Intended proposal flow: validated session context → model proposal → reference/quote validation → explicit state update. Source objects come from the session, never from the model's claimed references.
+## LangGraph workflow
 
-## Integration decisions
+ExplorationState wraps SessionState and optional command, idea_id and incoming_message. Each invocation handles one command; the caller passes the returned session to subsequent invocations. No checkpointer or persistent store is configured.
 
-- Keep domain rules, LLM decisions, transport and persistence separate so each can be tested independently.
-- Inject `Callable[[str], str]` for generation. Prompts and connection configuration are composed by the caller.
-- Use one local ChatGPT connection for this prototype, not a universal provider framework.
-- The bridge receives JSON text/instructions/model via stdin; stdout contains the response, stderr diagnostics. Credentials are encrypted through Electron safeStorage outside the repository.
-- The CLI requests an explicit model (default gpt-6.1-sol); bridge checks account availability. README's first-model statement is stale.
-- Prompted JSON plus Pydantic validation is implemented; schema-constrained provider generation is not.
-- Timeouts: model listing 30s, inference 60s, Python subprocess 120s. Automatic retries and workflow budgets are not implemented.
-- Evidence proves source attribution, not semantic correctness of an interpretation. Semantic quality needs separate evaluation.
+| Command | Route |
+| --- | --- |
+| explore (default) | Extract/add message and images; if no hypotheses, propose them; if any non-superseded hypotheses, revise them; otherwise skip to Guide |
+| generate_ideas | Generate and append an idea batch; no Guide question |
+| select_idea | Validate and record the user's selection; no generation |
+| build_blueprint | Validate selection, generate brief, append version; no search |
 
-## Planned orchestration and components
+Exploration routes end after the Guide. Nodes may represent multiple tasks of one AI role; they are not separate autonomous agents. Existing hypotheses currently prevent generating additional hypotheses from later images on that turn.
 
-LangGraph is a selected direction, not an installed dependency or implemented graph. Four AI roles remain the target:
+## Search and operating limits
 
-| Role | Planned responsibility | Current status |
-| --- | --- | --- |
-| Imagination Guide | One open question; adaptive exploration | Not implemented |
-| Metaphor Explorer | Extract images; propose/revise grounded hypotheses | Partial, as detailed above |
-| Idea Evolution | 2–3 diverse ideas linked to intent and images | Not implemented |
-| Reality Check | Limited search, feasibility and MVP brief | Not implemented |
+**Build My Idea** is the implemented primary behavior: blueprint generation without search.
+**Explore Existing Solutions** is planned as an explicit optional command. It may compare products, approaches or libraries; similar solutions must not automatically veto or replace the idea.
 
-A role may use multiple graph nodes. Graph nodes will call existing domain functions; graph routing controls order and allowed next actions. Model-selected questions/actions and bounded tool decisions supply agentic behavior; validation and persistence remain deterministic.
+The existing Tavily adapter makes one basic HTTP search, requests at most three results, disables generated answers/raw content, uses a 20s timeout and no automatic retry. Missing keys and transport/provider/validation failures yield unavailable. Search snippets are attributed external text, not independently verified facts. Search is not wired to the graph or SessionState.
 
-Discussed, not finalized: graph state wrapping SessionState plus a user command, next action and response; sequential processing of one user turn; atomic changes and duplicate-turn protection. Hypothesis history is product data and does not replace graph checkpoints.
+The local ChatGPT bridge uses explicit model selection and a separate DevKit checkout. Prompted JSON plus Pydantic validation is implemented; provider-enforced schemas are not. Listing/inference/subprocess timeouts are 30/60/120s. Credentials stay outside Git; TAVILY_API_KEY is read from the environment by the search demo.
 
-Still planned: relation/action extraction, model-driven hypothesis revision, adaptive dialogue, idea/brief/tool-result contracts, search with sources and an explicit unavailable status, SQLite persistence, FastAPI, minimal React/TypeScript UI, observability, evaluation, Docker and CI.
+## Planned, not implemented
 
-Exclude from the first MVP: application generation, GitHub edits/PR automation as product features, fine-tuning, unnecessary RAG/vector databases, billing/full authentication/collaboration, complex 3D and graph editors.
+Next: optional high-level architecture components in the brief, with responsibilities and tentative technology recommendations. No broad renaming of existing MVPBrief fields is needed.
+
+Also pending: explicit meaning confirmation, user-directed brief revision, optional research command/storage/source attribution, SQLite save/resume, API/UI, broader evaluation, telemetry and operation budgets, replay protection, packaging, Docker and CI. No fine-tuning, unnecessary RAG/vector database, billing or application-generation platform is planned for this MVP.
