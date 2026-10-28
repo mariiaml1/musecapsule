@@ -12,6 +12,7 @@ from musecapsule.models import (
     ProductIdea,
 )
 from musecapsule.state import SessionState
+from musecapsule.storage import SessionStore
 from musecapsule.workflow import build_exploration_graph
 
 
@@ -127,7 +128,7 @@ def test_initial_exploration_graph_preserves_sources_and_orders_steps():
     assert session.revision == 0
 
 
-def test_exploration_graph_revises_existing_hypothesis():
+def test_exploration_graph_continues_restored_session(tmp_path):
     original_message = Message(
         role="user",
         text="A note floats inside a transparent capsule.",
@@ -155,6 +156,14 @@ def test_exploration_graph_revises_existing_hypothesis():
         hypotheses=[hypothesis],
         revision=3,
     )
+
+    database_path = tmp_path / "sessions.db"
+    SessionStore(database_path).save(session)
+
+    restored = SessionStore(database_path).load(session.id)
+    assert restored is not None
+    assert restored == session
+
     clarification = Message(
         role="user",
         text="The capsule is opaque, not transparent.",
@@ -219,7 +228,7 @@ def test_exploration_graph_revises_existing_hypothesis():
     )
     result = graph.invoke(
         {
-            "session": session,
+            "session": restored,
             "incoming_message": clarification,
         }
     )
@@ -246,6 +255,15 @@ def test_exploration_graph_revises_existing_hypothesis():
 
     assert updated.revision == 6
     assert session.model_dump() == before
+
+    SessionStore(database_path).save(updated)
+    reopened = SessionStore(database_path).load(session.id)
+
+    assert reopened == updated
+    assert reopened is not None
+    assert reopened.hypotheses[0].status == "unsupported"
+    assert reopened.hypothesis_history[0].previous.status == "proposed"
+    assert reopened.messages[-1].role == "assistant"
 
 
 def test_exploration_graph_generates_ideas_without_exploration():
