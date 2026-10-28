@@ -183,8 +183,10 @@ def build_exploration_graph(
 
     def create_ideas(state: ExplorationState) -> dict:
         """Generate and store a validated batch of product ideas."""
+
         session = state["session"]
-        ideas = generate_product_ideas(
+
+        generated = generate_product_ideas(
             session.intent,
             messages=session.messages,
             images=session.images,
@@ -192,9 +194,12 @@ def build_exploration_graph(
             generate=generate_ideas,
         )
 
-        return {
-            "session": append_product_ideas(session, ideas),
-        }
+        for hypothesis in generated.new_hypotheses:
+            session = append_hypothesis(session, hypothesis)
+
+        session = append_product_ideas(session, generated.ideas)
+
+        return {"session": session}
 
     def build_blueprint(state: ExplorationState) -> dict:
         """Build and save a blueprint for the explicitly selected idea."""

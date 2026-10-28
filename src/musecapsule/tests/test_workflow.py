@@ -300,6 +300,21 @@ def test_exploration_graph_generates_ideas_without_exploration():
                         ),
                         "image_ids": [str(image.id)],
                         "hypothesis_ids": [],
+                        "new_hypotheses": [
+                            {
+                                "statement": (
+                                    "The golden note could represent one valuable result "
+                                    "within a bounded workspace."
+                                ),
+                                "image_ids": [str(image.id)],
+                                "evidence": [
+                                    {
+                                        "message_id": str(message.id),
+                                        "quote": "A golden note",
+                                    }
+                                ],
+                            }
+                        ],
                     },
                     {
                         "title": "One Note Idea Picker",
@@ -312,6 +327,21 @@ def test_exploration_graph_generates_ideas_without_exploration():
                         ),
                         "image_ids": [str(image.id)],
                         "hypothesis_ids": [],
+                        "new_hypotheses": [
+                            {
+                                "statement": (
+                                    "The golden note could represent one promising idea "
+                                    "selected from a collection."
+                                ),
+                                "image_ids": [str(image.id)],
+                                "evidence": [
+                                    {
+                                        "message_id": str(message.id),
+                                        "quote": "A golden note",
+                                    }
+                                ],
+                            }
+                        ],
                     },
                 ]
             }
@@ -343,17 +373,25 @@ def test_exploration_graph_generates_ideas_without_exploration():
     assert updated.ideas[1].title == "One Note Idea Picker"
     assert updated.ideas[0].id != updated.ideas[1].id
 
-    for idea in updated.ideas:
+    assert len(updated.hypotheses) == 2
+    assert updated.hypotheses[0].id != updated.hypotheses[1].id
+
+    for idea, hypothesis in zip(
+        updated.ideas,
+        updated.hypotheses,
+        strict=True,
+    ):
         assert idea.image_ids == [image.id]
-        assert idea.hypothesis_ids == []
+        assert idea.hypothesis_ids == [hypothesis.id]
+        assert hypothesis.status == "proposed"
+        assert hypothesis.evidence[0].message_id == message.id
 
     assert updated.id == session.id
     assert updated.intent == session.intent
     assert updated.messages == session.messages
     assert updated.images == session.images
-    assert updated.hypotheses == session.hypotheses
     assert updated.hypothesis_history == session.hypothesis_history
-    assert updated.revision == session.revision + 1
+    assert updated.revision == session.revision + 3
 
     assert session.model_dump() == before
 

@@ -4,7 +4,28 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from musecapsule.models import Hypothesis, ImageFragment, Intent, Message, ProductIdea
+from musecapsule.evidence import validate_evidence
+from musecapsule.models import (
+    EvidenceRef,
+    Hypothesis,
+    ImageFragment,
+    Intent,
+    Message,
+    ProductIdea,
+)
+
+
+class ProposedIdeaHypothesis(BaseModel):
+    """A new interpretation proposed as the foundation of a product idea.
+
+    Application code assigns its ID and proposed status.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    statement: str = Field(min_length=1)
+    image_ids: list[UUID] = Field(min_length=1)
+    evidence: list[EvidenceRef] = Field(min_length=1)
 
 
 class ProposedProductIdea(BaseModel):
@@ -17,6 +38,10 @@ class ProposedProductIdea(BaseModel):
     goal_alignment: str = Field(min_length=1)
     image_ids: list[UUID] = Field(min_length=1)
     hypothesis_ids: list[UUID]
+    new_hypotheses: list[ProposedIdeaHypothesis] = Field(
+        default_factory=list,
+        max_length=2,
+    )
 
 
 class IdeaGenerationResponse(BaseModel):
@@ -30,31 +55,44 @@ class IdeaGenerationResponse(BaseModel):
     )
 
 
+class IdeaGenerationResult(BaseModel):
+    """Validated ideas and the new hypotheses required by their references."""
+
+    ideas: list[ProductIdea]
+    new_hypotheses: list[Hypothesis]
+
+
 def parse_product_ideas(
     raw_response: str,
     *,
     images: list[ImageFragment],
     hypotheses: list[Hypothesis],
-) -> list[ProductIdea]:
-    """Parse product proposals and validate their source references.
+    messages: list[Message],
+) -> IdeaGenerationResult:
+    """Validate idea foundations and assign IDs to new interpretations.
 
-    Allow only proposed or supported hypotheses as inspiration.
-    Assign idea IDs in application code without changing session state.
+    Return the complete batch without changing session state.
 
     Raises:
-        ValueError: If the response or a source reference is invalid.
+        ValueError: If an idea has no meaning foundation or sources are invalid.
     """
+
     parsed = IdeaGenerationResponse.model_validate_json(raw_response)
     existing_image_ids = {image.id for image in images}
     hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in hypotheses}
-    result: list[ProductIdea] = []
+    messages_by_id = {message.id: message for message in messages}
+
+    ideas: list[ProductIdea] = []
+    new_hypotheses: list[Hypothesis] = []
 
     for proposal in parsed.ideas:
         for image_id in proposal.image_ids:
             if image_id not in existing_image_ids:
                 raise ValueError("Idea references a missing image.")
 
-        for hypothesis_id in proposal.hypothesis_ids:
+        linked_ids = list(proposal.hypothesis_ids)
+
+        for hypothesis_id in linked_ids:
             hypothesis = hypotheses_by_id.get(hypothesis_id)
 
             if hypothesis is None:
@@ -63,17 +101,44 @@ def parse_product_ideas(
             if hypothesis.status not in ("proposed", "supported"):
                 raise ValueError("Idea references an inactive hypothesis.")
 
-        result.append(
+        for proposed_meaning in proposal.new_hypotheses:
+            for image_id in proposed_meaning.image_ids:
+                if image_id not in proposal.image_ids:
+                    raise ValueError("New hypothesis must reference the idea's images.")
+
+            for evidence in proposed_meaning.evidence:
+                message = messages_by_id.get(evidence.message_id)
+
+                if message is None:
+                    raise ValueError("Evidence references a missing message.")
+
+                validate_evidence(evidence, message)
+
+            hypothesis = Hypothesis(
+                statement=proposed_meaning.statement,
+                image_ids=proposed_meaning.image_ids,
+                evidence=proposed_meaning.evidence,
+            )
+            new_hypotheses.append(hypothesis)
+            linked_ids.append(hypothesis.id)
+
+        if not linked_ids:
+            raise ValueError("Idea must have at least one meaning hypothesis.")
+
+        ideas.append(
             ProductIdea(
                 title=proposal.title,
                 description=proposal.description,
                 goal_alignment=proposal.goal_alignment,
                 image_ids=proposal.image_ids,
-                hypothesis_ids=proposal.hypothesis_ids,
+                hypothesis_ids=linked_ids,
             )
         )
 
-    return result
+    return IdeaGenerationResult(
+        ideas=ideas,
+        new_hypotheses=new_hypotheses,
+    )
 
 
 def generate_product_ideas(
@@ -83,7 +148,7 @@ def generate_product_ideas(
     images: list[ImageFragment],
     hypotheses: list[Hypothesis],
     generate: Callable[[str], str],
-) -> list[ProductIdea]:
+) -> IdeaGenerationResult:
     """Generate product ideas grounded in narrative sources and user intent.
 
     Exclude inactive hypotheses and validate returned source references.
@@ -118,4 +183,5 @@ def generate_product_ideas(
         raw_response,
         images=images,
         hypotheses=active_hypotheses,
+        messages=messages,
     )

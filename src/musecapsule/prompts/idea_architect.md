@@ -49,3 +49,8 @@ Use only supplied source IDs.
 Hypothesis references may be empty.
 Do not include idea_id, constraints, or user_confirmed; application code
 assigns those fields.
+
+If the selected idea has hypothesis references, include at least one
+related proposed or supported hypothesis in metaphor_origin.hypothesis_ids.
+Preserve the meaning behind that reference in meaning_basis and
+mechanic_mapping. Do not replace it with an unrelated interpretation.
