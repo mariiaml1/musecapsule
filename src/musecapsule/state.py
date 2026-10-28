@@ -11,6 +11,7 @@ from musecapsule.models import (
     ImageFragment,
     Intent,
     Message,
+    ProductIdea,
 )
 
 
@@ -22,6 +23,7 @@ class SessionState(BaseModel):
     images: list[ImageFragment] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
     hypothesis_history: list[HypothesisRevision] = Field(default_factory=list)
+    ideas: list[ProductIdea] = Field(default_factory=list)
 
 
 def append_message(
@@ -45,6 +47,7 @@ def append_message(
         images=state.images,
         hypotheses=state.hypotheses,
         hypothesis_history=state.hypothesis_history,
+        ideas=state.ideas,
         messages=[*state.messages, message],
         revision=state.revision + 1,
     )
@@ -83,6 +86,7 @@ def append_image_fragment(
         intent=state.intent,
         messages=state.messages,
         hypotheses=state.hypotheses,
+        ideas=state.ideas,
         hypothesis_history=state.hypothesis_history,
         images=[*state.images, fragment],
         revision=state.revision + 1,
@@ -129,6 +133,7 @@ def append_hypothesis(
         id=state.id,
         intent=state.intent,
         messages=state.messages,
+        ideas=state.ideas,
         hypothesis_history=state.hypothesis_history,
         hypotheses=[*state.hypotheses, hypothesis],
         images=state.images,
@@ -199,8 +204,58 @@ def revise_hypothesis_status(
         id=state.id,
         intent=state.intent,
         messages=state.messages,
+        ideas=state.ideas,
         hypothesis_history=[*state.hypothesis_history, revision_entry],
         hypotheses=updated_hypotheses,
         images=state.images,
+        revision=state.revision + 1,
+    )
+
+
+def append_product_ideas(
+    state: SessionState,
+    ideas: list[ProductIdea],
+) -> SessionState:
+    """Append a complete idea batch after validating all source references.
+
+    Preserve existing ideas and increment the session revision once.
+
+    Raises:
+        ValueError: If the batch size, IDs or source references are invalid.
+    """
+    if not 2 <= len(ideas) <= 3:
+        raise ValueError("An idea batch must contain two or three ideas.")
+
+    seen_ids = {idea.id for idea in state.ideas}
+    existing_image_ids = {image.id for image in state.images}
+    hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in state.hypotheses}
+
+    for idea in ideas:
+        if idea.id in seen_ids:
+            raise ValueError("Product idea already exists.")
+
+        seen_ids.add(idea.id)
+
+        for image_id in idea.image_ids:
+            if image_id not in existing_image_ids:
+                raise ValueError("Idea references a missing image.")
+
+        for hypothesis_id in idea.hypothesis_ids:
+            hypothesis = hypotheses_by_id.get(hypothesis_id)
+
+            if hypothesis is None:
+                raise ValueError("Idea references a missing hypothesis.")
+
+            if hypothesis.status not in ("proposed", "supported"):
+                raise ValueError("Idea references an inactive hypothesis.")
+
+    return SessionState(
+        id=state.id,
+        intent=state.intent,
+        messages=state.messages,
+        images=state.images,
+        hypotheses=state.hypotheses,
+        hypothesis_history=state.hypothesis_history,
+        ideas=[*state.ideas, *ideas],
         revision=state.revision + 1,
     )

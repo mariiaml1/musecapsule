@@ -49,6 +49,7 @@ def main() -> None:
         generate_images=create_generator("metaphor_explorer.md"),
         generate_hypotheses=create_generator("hypothesis_proposals.md"),
         generate_question=create_generator("imagination_guide.md"),
+        generate_ideas=create_generator("idea_evolution.md"),
     )
 
     session = SessionState(
@@ -85,6 +86,14 @@ def main() -> None:
         }
     )
     updated_session = continuation["session"]
+
+    idea_result = graph.invoke(
+        {
+            "session": updated_session,
+            "command": "generate_ideas",
+        }
+    )
+    updated_session = idea_result["session"]
 
     print(updated_session.model_dump_json(indent=2))
 

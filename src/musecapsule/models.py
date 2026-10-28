@@ -72,3 +72,19 @@ class HypothesisRevision(BaseModel):
     reason: str = Field(min_length=1)
     evidence: list[EvidenceRef] = Field(min_length=1)
     session_revision: int = Field(ge=1)
+
+
+class ProductIdea(BaseModel):
+    """A product proposal linked to narrative sources and optional hypotheses.
+
+    Represents an unvalidated idea, not evidence of novelty or market demand.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id: UUID = Field(default_factory=uuid4)
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    goal_alignment: str = Field(min_length=1)
+    image_ids: list[UUID] = Field(min_length=1)
+    hypothesis_ids: list[UUID] = Field(default_factory=list)

@@ -1,8 +1,9 @@
 from collections.abc import Callable
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from musecapsule.agents.idea_evolution import generate_product_ideas
 from musecapsule.agents.imagination_guide import generate_exploration_question
 from musecapsule.agents.metaphor_explorer import (
     extract_images,
@@ -15,14 +16,16 @@ from musecapsule.state import (
     append_hypothesis,
     append_image_fragment,
     append_message,
+    append_product_ideas,
     revise_hypothesis_status,
 )
 
 class ExplorationState(TypedDict):
-    """Workflow data for processing one user narrative message."""
+    """Workflow input and session data for an exploration command."""
 
     session: SessionState
-    incoming_message: Message
+    command: NotRequired[Literal["explore", "generate_ideas"]]
+    incoming_message: NotRequired[Message]
 
 
 def build_exploration_graph(
@@ -31,12 +34,17 @@ def build_exploration_graph(
     generate_hypotheses: Callable[[str], str],
     generate_revisions: Callable[[str], str],
     generate_question: Callable[[str], str],
+    generate_ideas: Callable[[str], str],
 ):
     """Compile an exploration workflow for one user message."""
 
     def explore_images(state: ExplorationState) -> dict:
         """Validate extraction before adding the message and its images."""
-        message = state["incoming_message"]
+
+        message = state.get("incoming_message")
+        if message is None:
+            raise ValueError("Exploration requires an incoming message.")
+
         fragments = extract_images(message, generate=generate_images)
 
         session = append_message(state["session"], message)
@@ -93,12 +101,17 @@ def build_exploration_graph(
 
     def revise_hypotheses(state: ExplorationState) -> dict:
         """Apply validated status revisions grounded in the new message."""
+
+        message = state.get("incoming_message")
+        if message is None:
+            raise ValueError("Exploration requires an incoming message.")
+
         session = state["session"]
         proposals = propose_hypothesis_revisions(
             session.intent,
             hypotheses=session.hypotheses,
             messages=session.messages,
-            clarification=state["incoming_message"],
+            clarification=message,
             generate=generate_revisions,
         )
 
@@ -113,18 +126,57 @@ def build_exploration_graph(
 
         return {"session": session}
 
+    def route_command(
+        state: ExplorationState,
+    ) -> Literal["explore_images", "create_ideas"]:
+        """Route an explicit command and validate its required input."""
+        command = state.get("command", "explore")
+
+        if command == "generate_ideas":
+            if not state["session"].images:
+                raise ValueError("At least one image is required to generate ideas.")
+            return "create_ideas"
+
+        if command == "explore":
+            message = state.get("incoming_message")
+            if message is None:
+                raise ValueError("Exploration requires an incoming message.")
+
+            if message.role != "user":
+                raise ValueError("Message is not from the user.")
+
+            return "explore_images"
+
+        raise ValueError("Unknown exploration command.")
+
+    def create_ideas(state: ExplorationState) -> dict:
+        """Generate and store a validated batch of product ideas."""
+        session = state["session"]
+        ideas = generate_product_ideas(
+            session.intent,
+            messages=session.messages,
+            images=session.images,
+            hypotheses=session.hypotheses,
+            generate=generate_ideas,
+        )
+
+        return {
+            "session": append_product_ideas(session, ideas),
+        }
+
     builder = StateGraph(ExplorationState)
 
     builder.add_node("explore_images", explore_images)
     builder.add_node("explore_hypotheses", explore_hypotheses)
     builder.add_node("revise_hypotheses", revise_hypotheses)
     builder.add_node("ask_question", ask_question)
+    builder.add_node("create_ideas", create_ideas)
 
-    builder.add_edge(START, "explore_images")
+    builder.add_conditional_edges(START, route_command)
     builder.add_conditional_edges("explore_images", route_after_images)
 
     builder.add_edge("explore_hypotheses", "ask_question")
     builder.add_edge("revise_hypotheses", "ask_question")
-    builder.add_edge("ask_question", END)
+    builder.add_edge("create_ideas", END)
 
     return builder.compile()

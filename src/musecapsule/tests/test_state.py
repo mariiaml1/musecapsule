@@ -2,12 +2,20 @@ from uuid import uuid4
 
 import pytest
 
-from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
+from musecapsule.models import (
+    EvidenceRef,
+    Hypothesis,
+    ImageFragment,
+    Intent,
+    Message,
+    ProductIdea,
+)
 from musecapsule.state import (
     SessionState,
     append_hypothesis,
     append_image_fragment,
     append_message,
+    append_product_ideas,
     revise_hypothesis_status,
 )
 
@@ -536,3 +544,146 @@ def test_revise_hypothesis_status_rejects_unchanged_status():
                 )
             ],
         )
+
+
+def test_append_product_ideas_preserves_previous_state():
+    message_id = uuid4()
+    image_id = uuid4()
+    hypothesis_id = uuid4()
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=["Local execution"],
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+    )
+
+    idea1 = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[image_id],
+        hypothesis_ids=[hypothesis_id],
+    )
+    idea2 = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[image_id],
+        hypothesis_ids=[hypothesis_id],
+    )
+    updated = append_product_ideas(state, [idea1, idea2])
+
+    assert updated.id == state.id
+    assert updated.intent == state.intent
+    assert updated.hypotheses == state.hypotheses
+    assert updated.revision == 1
+    assert updated.messages == state.messages
+    assert updated.images == state.images
+    assert updated.ideas == [idea1, idea2]
+
+    assert state.ideas == []
+    assert state.revision == 0
+
+    next_message = Message(
+        role="user",
+        text="I want to explore the first idea.",
+    )
+    continued = append_message(updated, next_message)
+
+    assert continued.ideas == [idea1, idea2]
+    assert continued.revision == updated.revision + 1
+    assert updated.messages == state.messages
+
+
+def test_append_product_ideas_rejects_invalid_batch_without_changing_state():
+    message_id = uuid4()
+    image_id = uuid4()
+    missing_image_id = uuid4()
+    hypothesis_id = uuid4()
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=["Local execution"],
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+    )
+
+    valid_idea = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[image_id],
+        hypothesis_ids=[hypothesis_id],
+    )
+    invalid_idea = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[missing_image_id],
+        hypothesis_ids=[hypothesis_id],
+    )
+
+    before = state.model_dump()
+
+    with pytest.raises(
+        ValueError,
+        match="Idea references a missing image.",
+    ):
+        append_product_ideas(state, [valid_idea, invalid_idea])
+
+    assert state.model_dump() == before
