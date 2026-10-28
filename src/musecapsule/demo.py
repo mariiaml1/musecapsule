@@ -1,7 +1,11 @@
 import argparse
 from collections.abc import Callable
 from pathlib import Path
+import sqlite3
+import sys
 from uuid import UUID
+
+from pydantic import ValidationError
 
 from musecapsule.llm import request_generation
 from musecapsule.models import Intent, Message
@@ -328,5 +332,43 @@ def main() -> None:
     print(updated_session.model_dump_json(indent=2))
 
 
+def cli() -> int:
+    """Run the CLI and translate expected failures into concise messages."""
+    try:
+        main()
+    except ValidationError:
+        print(
+            "Error: Generated or stored data failed validation. "
+            "Previously saved snapshots remain available.",
+            file=sys.stderr,
+        )
+        return 1
+    except ValueError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except RuntimeError:
+        print(
+            "Error: Generation could not be completed. "
+            "Check the local ChatGPT connection and try again.",
+            file=sys.stderr,
+        )
+        return 1
+    except (sqlite3.Error, OSError):
+        print(
+            "Error: A local file or database operation failed. "
+            "Check paths, permissions, and available disk space.",
+            file=sys.stderr,
+        )
+        return 1
+    except EOFError:
+        print("Error: Input ended before the action was completed.", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nOperation cancelled.", file=sys.stderr)
+        return 130
+
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(cli())

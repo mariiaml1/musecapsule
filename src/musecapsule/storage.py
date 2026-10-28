@@ -6,6 +6,10 @@ from uuid import UUID
 from musecapsule.state import SessionState
 
 
+class SessionConflictError(Exception):
+    """The session changed after the operation loaded its starting state."""
+
+
 class SessionStore:
     """Store session snapshots in a local SQLite database."""
 
@@ -25,15 +29,43 @@ class SessionStore:
                     )
                     """)
 
-    def save(self, session: SessionState) -> None:
-        """Save a new snapshot without overwriting an existing revision.
+    def save(
+        self,
+        session: SessionState,
+        *,
+        expected_revision: int | None = None,
+    ) -> None:
+        """Save a snapshot, optionally checking the latest stored revision.
 
         Raises:
-            ValueError: If this session revision is already stored.
+            SessionConflictError: If another operation changed the session.
+            ValueError: If the revision is invalid or already stored.
         """
+
+        if expected_revision is not None and session.revision <= expected_revision:
+            raise ValueError("The new revision must exceed the expected revision.")
+
         try:
             with closing(sqlite3.connect(self.database_path)) as connection:
                 with connection:
+                    # Keep the check and insert in one write transaction.
+                    connection.execute("BEGIN IMMEDIATE")
+
+                    if expected_revision is not None:
+                        row = connection.execute(
+                            """
+                            SELECT MAX(revision)
+                            FROM session_snapshots
+                            WHERE session_id = ?
+                            """,
+                            (str(session.id),),
+                        ).fetchone()
+
+                        if row[0] != expected_revision:
+                            raise SessionConflictError(
+                                "Session changed during processing."
+                            )
+
                     connection.execute(
                         """
                         INSERT INTO session_snapshots (

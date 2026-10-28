@@ -4,7 +4,7 @@ import pytest
 
 from musecapsule.models import Intent, Message
 from musecapsule.state import SessionState, append_message
-from musecapsule.storage import SessionStore
+from musecapsule.storage import SessionConflictError, SessionStore
 
 
 def test_session_store_restores_state_after_reopening(tmp_path):
@@ -32,6 +32,7 @@ def test_session_store_restores_state_after_reopening(tmp_path):
     assert restored == session
     assert restored is not session
     assert restored.messages[0].id == session.messages[0].id
+
 
 def test_session_store_loads_latest_revision(tmp_path):
     store = SessionStore(tmp_path / "sessions.db")
@@ -76,3 +77,31 @@ def test_session_store_rejects_overwriting_existing_revision(tmp_path):
         store.save(conflicting)
 
     assert store.load(session.id) == session
+
+
+def test_session_store_rejects_stale_update(tmp_path):
+    store = SessionStore(tmp_path / "sessions.db")
+    initial = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+    )
+    store.save(initial)
+
+    winner = append_message(
+        initial,
+        Message(role="user", text="A bunny crosses the grass."),
+    )
+    store.save(winner, expected_revision=initial.revision)
+
+    stale = append_message(
+        initial,
+        Message(role="user", text="A note floats in a capsule."),
+    )
+    stale = append_message(
+        stale,
+        Message(role="assistant", text="What happens to the note?"),
+    )
+
+    with pytest.raises(SessionConflictError):
+        store.save(stale, expected_revision=initial.revision)
+
+    assert store.load(initial.id) == winner
