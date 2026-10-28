@@ -24,6 +24,7 @@ class SessionState(BaseModel):
     hypotheses: list[Hypothesis] = Field(default_factory=list)
     hypothesis_history: list[HypothesisRevision] = Field(default_factory=list)
     ideas: list[ProductIdea] = Field(default_factory=list)
+    selected_idea_id: UUID | None = None
 
 
 def append_message(
@@ -48,6 +49,7 @@ def append_message(
         hypotheses=state.hypotheses,
         hypothesis_history=state.hypothesis_history,
         ideas=state.ideas,
+        selected_idea_id=state.selected_idea_id,
         messages=[*state.messages, message],
         revision=state.revision + 1,
     )
@@ -87,6 +89,7 @@ def append_image_fragment(
         messages=state.messages,
         hypotheses=state.hypotheses,
         ideas=state.ideas,
+        selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
         images=[*state.images, fragment],
         revision=state.revision + 1,
@@ -134,6 +137,7 @@ def append_hypothesis(
         intent=state.intent,
         messages=state.messages,
         ideas=state.ideas,
+        selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
         hypotheses=[*state.hypotheses, hypothesis],
         images=state.images,
@@ -205,6 +209,7 @@ def revise_hypothesis_status(
         intent=state.intent,
         messages=state.messages,
         ideas=state.ideas,
+        selected_idea_id=state.selected_idea_id,
         hypothesis_history=[*state.hypothesis_history, revision_entry],
         hypotheses=updated_hypotheses,
         images=state.images,
@@ -255,7 +260,38 @@ def append_product_ideas(
         messages=state.messages,
         images=state.images,
         hypotheses=state.hypotheses,
+        selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
         ideas=[*state.ideas, *ideas],
+        revision=state.revision + 1,
+    )
+
+
+def select_product_idea(
+    state: SessionState,
+    idea_id: UUID,
+) -> SessionState:
+    """Select an existing product idea without changing its contents.
+
+    Preserve the input state. Selecting the current idea is a no-op.
+
+    Raises:
+        ValueError: If the idea does not exist in the session.
+    """
+    if not any(idea.id == idea_id for idea in state.ideas):
+        raise ValueError("Selected idea does not exist.")
+
+    if state.selected_idea_id == idea_id:
+        return state
+
+    return SessionState(
+        id=state.id,
+        intent=state.intent,
+        messages=state.messages,
+        images=state.images,
+        hypotheses=state.hypotheses,
+        hypothesis_history=state.hypothesis_history,
+        ideas=state.ideas,
+        selected_idea_id=idea_id,
         revision=state.revision + 1,
     )

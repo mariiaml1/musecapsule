@@ -1,8 +1,16 @@
 import json
+from uuid import uuid4
 
 import pytest
 
-from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
+from musecapsule.models import (
+    EvidenceRef,
+    Hypothesis,
+    ImageFragment,
+    Intent,
+    Message,
+    ProductIdea,
+)
 from musecapsule.state import SessionState
 from musecapsule.workflow import build_exploration_graph
 
@@ -336,3 +344,63 @@ def test_exploration_graph_generates_ideas_without_exploration():
     assert updated.revision == session.revision + 1
 
     assert session.model_dump() == before
+
+
+def test_exploration_graph_selects_idea_without_generation():
+    chosen_idea_id = uuid4()
+    message = Message(
+        role="user",
+        text="A golden note floats inside a capsule.",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[
+            EvidenceRef(
+                message_id=message.id,
+                quote="A golden note",
+            )
+        ],
+    )
+    idea = ProductIdea(
+        id=chosen_idea_id,
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[image.id],
+        hypothesis_ids=[],
+    )
+    session = SessionState(
+        intent=Intent(
+            goal="Build an AI portfolio project",
+            constraints=["Solo development", "Local execution"],
+        ),
+        messages=[message],
+        images=[image],
+        ideas=[idea],
+    )
+
+    def unexpected_generation(_: str) -> str:
+        pytest.fail("Selection must not invoke generation.")
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=unexpected_generation,
+    )
+
+    result = graph.invoke(
+        {
+            "session": session,
+            "command": "select_idea",
+            "idea_id": chosen_idea_id,
+        }
+    )
+    updated = result["session"]
+
+    assert updated.selected_idea_id == idea.id
+    assert updated.revision == session.revision + 1
+    assert updated.messages == session.messages
+    assert updated.ideas == session.ideas
+    assert session.selected_idea_id is None

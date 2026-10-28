@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Literal, NotRequired, TypedDict
+from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 
@@ -18,13 +19,15 @@ from musecapsule.state import (
     append_message,
     append_product_ideas,
     revise_hypothesis_status,
+    select_product_idea,
 )
 
 class ExplorationState(TypedDict):
     """Workflow input and session data for an exploration command."""
 
     session: SessionState
-    command: NotRequired[Literal["explore", "generate_ideas"]]
+    command: NotRequired[Literal["explore", "generate_ideas", "select_idea"]]
+    idea_id: NotRequired[UUID]
     incoming_message: NotRequired[Message]
 
 
@@ -37,6 +40,16 @@ def build_exploration_graph(
     generate_ideas: Callable[[str], str],
 ):
     """Compile an exploration workflow for one user message."""
+
+    def select_idea(state: ExplorationState) -> dict:
+        """Apply the user's explicit idea selection without generation."""
+        idea_id = state.get("idea_id")
+        if idea_id is None:
+            raise ValueError("Idea selection requires an idea ID.")
+
+        return {
+            "session": select_product_idea(state["session"], idea_id),
+        }
 
     def explore_images(state: ExplorationState) -> dict:
         """Validate extraction before adding the message and its images."""
@@ -128,7 +141,7 @@ def build_exploration_graph(
 
     def route_command(
         state: ExplorationState,
-    ) -> Literal["explore_images", "create_ideas"]:
+    ) -> Literal["explore_images", "create_ideas", "select_idea"]:
         """Route an explicit command and validate its required input."""
         command = state.get("command", "explore")
 
@@ -136,6 +149,12 @@ def build_exploration_graph(
             if not state["session"].images:
                 raise ValueError("At least one image is required to generate ideas.")
             return "create_ideas"
+
+        if command == "select_idea":
+            if state.get("idea_id") is None:
+                raise ValueError("Idea selection requires an idea ID.")
+
+            return "select_idea"
 
         if command == "explore":
             message = state.get("incoming_message")
@@ -171,12 +190,14 @@ def build_exploration_graph(
     builder.add_node("revise_hypotheses", revise_hypotheses)
     builder.add_node("ask_question", ask_question)
     builder.add_node("create_ideas", create_ideas)
+    builder.add_node("select_idea", select_idea)
 
     builder.add_conditional_edges(START, route_command)
     builder.add_conditional_edges("explore_images", route_after_images)
 
     builder.add_edge("explore_hypotheses", "ask_question")
     builder.add_edge("revise_hypotheses", "ask_question")
+    builder.add_edge("select_idea", END)
     builder.add_edge("create_ideas", END)
 
     return builder.compile()

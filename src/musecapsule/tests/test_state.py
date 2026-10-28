@@ -17,6 +17,7 @@ from musecapsule.state import (
     append_message,
     append_product_ideas,
     revise_hypothesis_status,
+    select_product_idea,
 )
 
 def test_append_message_preserves_previous_state():
@@ -687,3 +688,192 @@ def test_append_product_ideas_rejects_invalid_batch_without_changing_state():
         append_product_ideas(state, [valid_idea, invalid_idea])
 
     assert state.model_dump() == before
+
+
+def test_select_product_idea_preserves_previous_state():
+    message_id = uuid4()
+    image_id = uuid4()
+    hypothesis_id = uuid4()
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=["Local execution"],
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+        ideas=[
+            ProductIdea(
+                title="Inspectable AI Sandbox",
+                description="A local tool for inspecting small AI experiments.",
+                goal_alignment="A bounded AI portfolio project for solo development.",
+                image_ids=[image_id],
+                hypothesis_ids=[hypothesis_id],
+            )
+        ],
+    )
+
+    updated = select_product_idea(state, state.ideas[0].id)
+
+    assert updated.id == state.id
+    assert updated.intent == state.intent
+    assert updated.hypotheses == state.hypotheses
+    assert updated.revision == 1
+    assert updated.messages == state.messages
+    assert updated.images == state.images
+    assert updated.ideas == state.ideas
+    assert updated.selected_idea_id == state.ideas[0].id
+    assert state.selected_idea_id is None
+    assert updated.hypothesis_history == state.hypothesis_history
+
+    assert state.revision == 0
+
+    continued = append_message(
+        updated,
+        Message(
+            role="user",
+            text="Let's develop the selected idea.",
+        ),
+    )
+
+    assert continued.selected_idea_id == updated.selected_idea_id
+    assert updated.messages == state.messages
+
+
+def test_select_product_idea_rejects_missing_idea():
+    message_id = uuid4()
+    image_id = uuid4()
+    hypothesis_id = uuid4()
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=["Local execution"],
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+        ideas=[
+            ProductIdea(
+                title="Inspectable AI Sandbox",
+                description="A local tool for inspecting small AI experiments.",
+                goal_alignment="A bounded AI portfolio project for solo development.",
+                image_ids=[image_id],
+                hypothesis_ids=[hypothesis_id],
+            )
+        ],
+    )
+
+    before = state.model_dump()
+
+    with pytest.raises(ValueError, match="Selected idea does not exist."):
+        select_product_idea(state, uuid4())
+
+    assert state.model_dump() == before
+    assert state.revision == 0
+    assert len(state.ideas) == 1
+
+
+def test_select_product_idea_is_noop_for_current_selection():
+    message_id = uuid4()
+    image_id = uuid4()
+    hypothesis_id = uuid4()
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=["Local execution"],
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+        ideas=[
+            ProductIdea(
+                title="Inspectable AI Sandbox",
+                description="A local tool for inspecting small AI experiments.",
+                goal_alignment="A bounded AI portfolio project for solo development.",
+                image_ids=[image_id],
+                hypothesis_ids=[hypothesis_id],
+            )
+        ],
+    )
+
+    selected = select_product_idea(state, state.ideas[0].id)
+
+    repeated = select_product_idea(selected, state.ideas[0].id)
+
+    assert repeated is selected
+    assert repeated.revision == selected.revision

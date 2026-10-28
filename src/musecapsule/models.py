@@ -88,3 +88,37 @@ class ProductIdea(BaseModel):
     goal_alignment: str = Field(min_length=1)
     image_ids: list[UUID] = Field(min_length=1)
     hypothesis_ids: list[UUID] = Field(default_factory=list)
+
+
+class MVPBrief(BaseModel):
+    """An implementation proposal for a selected product idea.
+
+    Does not establish market demand, novelty or external verification.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    idea_id: UUID
+    problem: str = Field(min_length=1)
+    audience: str = Field(min_length=1)
+    core_scenario: str = Field(min_length=1)
+    features: list[str] = Field(min_length=1, max_length=5)
+    constraints: list[str] = Field(min_length=1)
+    risks: list[str] = Field(min_length=1)
+    acceptance_criteria: list[str] = Field(min_length=1)
+
+    @field_validator(
+        "features",
+        "constraints",
+        "risks",
+        "acceptance_criteria",
+    )
+    @classmethod
+    def reject_blank_items(cls, values: list[str]) -> list[str]:
+        """Reject empty list items and normalize surrounding whitespace."""
+        normalized = [value.strip() for value in values]
+
+        if any(not value for value in normalized):
+            raise ValueError("Brief list items must not be blank.")
+
+        return normalized

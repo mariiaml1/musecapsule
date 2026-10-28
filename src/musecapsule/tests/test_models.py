@@ -4,7 +4,15 @@ import pytest
 from pydantic import ValidationError
 
 from musecapsule.evidence import validate_evidence
-from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
+from musecapsule.models import (
+    EvidenceRef,
+    Hypothesis,
+    ImageFragment,
+    Intent,
+    MVPBrief,
+    Message,
+)
+
 
 def test_intent_rejects_non_string_constrain():
     with pytest.raises(ValidationError):
@@ -212,3 +220,27 @@ def test_hypothesis_requires_evidence(evidence_fields):
             image_ids=[uuid4()],
             **evidence_fields,
         )
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["features", "constraints", "risks", "acceptance_criteria"],
+)
+def test_mvp_brief_rejects_blank_list_items(field_name):
+    fields = {
+        "idea_id": uuid4(),
+        "problem": "Developers need a bounded way to inspect AI experiments.",
+        "audience": "Developers building local AI prototypes.",
+        "core_scenario": "Run an experiment and inspect its saved result.",
+        "features": ["Run one experiment"],
+        "constraints": ["Solo development"],
+        "risks": ["Model responses may be invalid"],
+        "acceptance_criteria": ["A valid result can be saved and reopened"],
+    }
+    fields[field_name] = ["Valid item", "   "]
+
+    with pytest.raises(
+        ValidationError,
+        match="Brief list items must not be blank.",
+    ):
+        MVPBrief.model_validate(fields)
