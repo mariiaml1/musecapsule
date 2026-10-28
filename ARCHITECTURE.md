@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 2026-10-28. Code inspected at `3ad26c9934f8c3887c2b670ba45f7a5cfdae7b41` on master. This is a source review, not a fresh test run.
+Updated: 2026-10-29. Code inspected at `7cbfad7d122ab6fd60cf9d589634e5e56550f596` on master. This is a source review, not a fresh test run.
 
 ## Product principles
 
@@ -29,7 +29,10 @@ All Python paths below are relative to `src/musecapsule/`.
 | llm.py | request_generation: synchronous transport, raw response and error handling |
 | bridge/chatgpt.cjs (repository root) | Electron/ChatGPT connection and encrypted credentials |
 | search.py | Standalone bounded Tavily adapter |
-| demo.py | Scripted two-turn exploration, ideas, interactive selection, brief |
+| storage.py | SQLite JSON snapshots and optional optimistic revision checks |
+| api.py | HTTP contracts, injected processing, error mapping and persistence |
+| server.py | Configure the real graph and local connection from environment |
+| demo.py | Scripted demo, custom goals, restored-session CLI actions |
 | search_demo.py | Independent manual search check |
 | tests/ | Unit and workflow integration tests using substituted external generation |
 
@@ -47,7 +50,7 @@ Each AI function accepts a generation callable. Providers do not mutate domain s
 | HypothesisRevision | Previous snapshot, new status, reason, evidence and session revision |
 | ProductIdea | UUID, title, description, goal_alignment, image_ids and optional hypothesis_ids |
 | MetaphorOrigin | Source IDs, meaning_basis, mechanic_mapping, user_confirmed |
-| MVPBrief | idea_id, idea_summary, metaphor_origin, problem, audience, core_scenario, up to five features, constraints, risks, acceptance_criteria |
+| MVPBrief | idea_id, idea_summary, metaphor_origin, problem, audience, core_scenario, up to five features, constraints, risks, acceptance_criteria, optional suggested_architecture (up to six components) |
 | SimilarSolution / ExternalCheck | Provider result title/URL/snippet and not_run/completed/unavailable outcome |
 
 Supported means supported by the narrative, not user-selected for implementation or externally proven. There is no explicit meaning-confirmation feature. Idea Architect assigns user_confirmed=False; selecting an idea does not confirm its interpretation.
@@ -62,15 +65,15 @@ Metaphor Explorer validates extraction quotes and assigns application IDs. Hypot
 
 Imagination Guide receives dialogue, images and hypotheses, including corrections. The schema enforces one nonblank question string; openness, lack of leading options and semantic correctness require evaluation.
 
-Idea Evolution receives intent, dialogue, images and proposed/supported hypotheses. It validates source references and generates 2–3 ideas; hypotheses may be omitted. Invalid batches are not accepted by the state operation.
+Idea Evolution receives intent, dialogue, images and proposed/supported hypotheses. Every generated idea needs an existing or new meaning hypothesis. New proposals contain statement, image IDs and exact evidence; application code assigns IDs/statuses. IdeaGenerationResult returns ideas and new_hypotheses as one validated batch. Existing hypotheses contribute all their image references to the idea. One hypothesis can combine multiple images; multiple hypotheses can support one idea. ProductIdea still permits empty hypothesis_ids for legacy/direct construction. The workflow appends new hypotheses before their ideas and returns only the completed node result.
 
-Idea Architect receives the selected idea, linked images/hypotheses, full dialogue and intent. Related inactive hypotheses remain contextual warnings but cannot be cited as foundations. The parser requires origins to exist and belong to the selected idea. Application code assigns idea_id, copies constraints from Intent and sets user_confirmed=False. The model cannot assign these fields in BlueprintResponse. A brief can be generated without hypotheses or external research.
+Idea Architect receives the selected idea, linked images/hypotheses, full dialogue and intent. Related inactive hypotheses remain contextual warnings but cannot be cited as foundations. The parser requires origins to exist and belong to the selected idea. Application code assigns idea_id, copies constraints from Intent and sets user_confirmed=False. The model cannot assign these fields in BlueprintResponse. A brief can be generated without external research. The parser requires exact set equality between the idea's image/hypothesis IDs and the returned origin, and rejects inactive foundations. Legacy ideas with no hypotheses remain compatible. suggested_architecture is an optional list of component names, responsibilities and provisional technology recommendations, not separate required services.
 
 Exact provenance checks do not prove semantic entailment, novelty, demand or feasibility.
 
 ## LangGraph workflow
 
-ExplorationState wraps SessionState and optional command, idea_id and incoming_message. Each invocation handles one command; the caller passes the returned session to subsequent invocations. No checkpointer or persistent store is configured.
+ExplorationState wraps SessionState and optional command, idea_id and incoming_message. Each invocation handles one command; the caller passes the returned session to subsequent invocations. SQLite persists completed domain snapshots outside LangGraph; no graph checkpointer is configured.
 
 | Command | Route |
 | --- | --- |
@@ -90,8 +93,29 @@ The existing Tavily adapter makes one basic HTTP search, requests at most three 
 
 The local ChatGPT bridge uses explicit model selection and a separate DevKit checkout. Prompted JSON plus Pydantic validation is implemented; provider-enforced schemas are not. Listing/inference/subprocess timeouts are 30/60/120s. Credentials stay outside Git; TAVILY_API_KEY is read from the environment by the search demo.
 
+## Persistence and HTTP API
+
+SessionStore stores full Pydantic JSON snapshots keyed by (session_id, revision). load returns the highest revision and revalidates it. save never overwrites an existing revision. Optional expected_revision is checked against the latest stored value in the same BEGIN IMMEDIATE transaction as insertion; the lock does not span LLM generation.
+
+The API uses this optimistic check after processing. Concurrent stale results return 409 rather than overwriting newer data; duplicate parallel LLM work is still possible. A no-op skips storage and may return a stale loaded snapshot. CLI saves currently omit expected_revision.
+
+| HTTP operation | Result |
+| --- | --- |
+| POST /sessions | Create from Intent, persist revision 0; 201 |
+| GET /sessions/{id} | Latest saved session; 200 or 404 |
+| POST /sessions/{id}/messages | Body: text; graph exploration and save |
+| POST /sessions/{id}/ideas | New idea batch; no body or Guide question |
+| POST /sessions/{id}/selection | Body: idea_id; deterministic selection |
+| POST /sessions/{id}/briefs | New brief version for selected idea; no search |
+
+api.create_app accepts a database path and optional processing callables for testing. server.create_local_app binds the actual graph. Missing processors yield 503. Preconditions such as missing selection yield 409; unknown resources yield 404; invalid request bodies yield 422. Generated-data/provider failures map to sanitized 502 responses. Storage failures are not comprehensively mapped yet.
+
+SQLite persistence is a completed-command checkpoint, not resumption within an interrupted model call. Repeated blueprint generation is a fresh proposal and can change technical details; it is not targeted editing of a previous brief.
+
 ## Planned, not implemented
 
-Next: optional high-level architecture components in the brief, with responsibilities and tentative technology recommendations. No broad renaming of existing MVPBrief fields is needed.
+Next: minimal React/TypeScript UI consuming the existing API, including explicit loading/error states, no automatic retries for generating POST requests, and a reload path after 409.
 
-Also pending: explicit meaning confirmation, user-directed brief revision, optional research command/storage/source attribution, SQLite save/resume, API/UI, broader evaluation, telemetry and operation budgets, replay protection, packaging, Docker and CI. No fine-tuning, unnecessary RAG/vector database, billing or application-generation platform is planned for this MVP.
+Also pending: explicit meaning confirmation, user-directed brief editing, optional research command/storage/source attribution, broader evaluation, token/latency telemetry and total operation budgets, replay/idempotency protection, packaging, Docker and CI. No fine-tuning, unnecessary RAG/vector database, billing or application-generation platform is planned for this MVP.
+
+Historical image descriptions coexist; semantic correction is prompt-based. Origin validation protects references, not creative correctness. Brief versions have no timestamps/source revisions and are not automatically marked stale after later dialogue.
