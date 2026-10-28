@@ -42,7 +42,14 @@ Return only JSON:
   "core_scenario": "The main user journey",
   "features": ["One essential MVP feature"],
   "risks": ["A concrete uncertainty or implementation risk"],
-  "acceptance_criteria": ["An observable condition of completion"]
+  "acceptance_criteria": ["An observable condition of completion"],
+  "suggested_architecture": [
+    {
+      "name": "Evaluation runner",
+      "responsibility": "Execute test cases and collect observable results.",
+      "suggested_technology": "Python"
+    }
+  ],
 }
 
 Use only supplied source IDs.
@@ -58,3 +65,19 @@ rather than merely listing sources.
 
 Do not add unrelated images or meanings. If a linked hypothesis is
 unsupported or superseded, do not use it as a foundation.
+
+When useful, propose the smallest practical technical architecture.
+Use at most six components. A component is a responsibility boundary,
+not necessarily a separate service or deployment.
+
+For each component, describe its responsibility and optionally suggest
+a technology. Use null when no technology recommendation is needed.
+
+Keep recommendations compatible with the user's explicit constraints.
+Do not invent their skills, hardware, budget, or available time.
+Avoid unnecessary infrastructure.
+Technology choices are provisional and require documentation and license
+checks before implementation. Do not invent versions or claim verification.
+
+Return suggested_architecture as an empty list when a technical
+decomposition would not help.

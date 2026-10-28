@@ -4,7 +4,11 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from musecapsule.agents.idea_architect import ProposedMetaphorOrigin, generate_blueprint, parse_blueprint_response
+from musecapsule.agents.idea_architect import (
+    ProposedMetaphorOrigin,
+    generate_blueprint,
+    parse_blueprint_response,
+)
 from musecapsule.models import (
     EvidenceRef,
     Hypothesis,
@@ -13,6 +17,7 @@ from musecapsule.models import (
     Message,
     ProductIdea,
 )
+
 
 def test_proposed_origin_rejects_model_assigned_confirmation():
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
@@ -514,3 +519,82 @@ def test_parse_blueprint_rejects_dropped_origin_hypothesis():
             images=[image_note, image_capsule],
             hypotheses=[first_hypothesis, second_hypothesis],
         )
+
+
+def test_parse_blueprint_preserves_suggested_architecture():
+    image_id = uuid4()
+    intent = Intent(
+        goal="Build an AI portfolio project",
+        constraints=["Solo development", "Local execution"],
+    )
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    linked_image = ImageFragment(
+        id=image_id,
+        label="Golden note",
+        evidence=[source],
+    )
+
+    idea = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[linked_image.id],
+        hypothesis_ids=[],
+    )
+    raw_response = json.dumps(
+        {
+            "idea_summary": "A local workspace for inspecting AI experiments.",
+            "metaphor_origin": {
+                "meaning_basis": "One valuable result in a bounded space.",
+                "mechanic_mapping": (
+                    "Each workspace contains one experiment and its result."
+                ),
+                "image_ids": [str(linked_image.id)],
+                "hypothesis_ids": [],
+            },
+            "problem": "Small AI experiments are difficult to organize.",
+            "audience": "Developers building AI prototypes.",
+            "core_scenario": "Run an experiment and inspect its saved result.",
+            "features": ["Run and save one experiment"],
+            "risks": ["Model responses may be invalid"],
+            "acceptance_criteria": ["A saved experiment result can be reopened"],
+            "suggested_architecture": [
+                {
+                    "name": "Experiment runner",
+                    "responsibility": "Execute one experiment and collect its result.",
+                    "suggested_technology": "Python",
+                },
+                {
+                    "name": "Result storage",
+                    "responsibility": "Save results for later inspection.",
+                    "suggested_technology": None,
+                },
+            ],
+        }
+    )
+
+    parsed = parse_blueprint_response(
+        raw_response,
+        idea=idea,
+        intent=intent,
+        images=[linked_image],
+        hypotheses=[],
+    )
+    assert len(parsed.suggested_architecture) == 2
+
+    runner, storage = parsed.suggested_architecture
+
+    assert runner.name == "Experiment runner"
+    assert runner.responsibility == ("Execute one experiment and collect its result.")
+    assert runner.suggested_technology == "Python"
+
+    assert storage.name == "Result storage"
+    assert storage.responsibility == "Save results for later inspection."
+    assert storage.suggested_technology is None

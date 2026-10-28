@@ -4,8 +4,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from musecapsule.models import Hypothesis, ImageFragment, Intent, MVPBrief, Message, MetaphorOrigin, ProductIdea
-
+from musecapsule.models import (
+    ArchitectureComponent,
+    Hypothesis,
+    ImageFragment,
+    Intent,
+    MVPBrief,
+    Message,
+    MetaphorOrigin,
+    ProductIdea,
+)
 
 class ProposedMetaphorOrigin(BaseModel):
     """A proposed interpretation and its connection to product mechanics."""
@@ -34,6 +42,10 @@ class BlueprintResponse(BaseModel):
     features: list[str] = Field(min_length=1, max_length=5)
     risks: list[str] = Field(min_length=1)
     acceptance_criteria: list[str] = Field(min_length=1)
+    suggested_architecture: list[ArchitectureComponent] = Field(
+        default_factory=list,
+        max_length=6,
+    )
 
 def parse_blueprint_response(
     raw_response: str,
@@ -103,6 +115,7 @@ def parse_blueprint_response(
         constraints=list(intent.constraints),
         risks=parsed.risks,
         acceptance_criteria=parsed.acceptance_criteria,
+        suggested_architecture=parsed.suggested_architecture,
     )
 
 def generate_blueprint(

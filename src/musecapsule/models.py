@@ -105,6 +105,25 @@ class MetaphorOrigin(BaseModel):
     user_confirmed: bool = False
 
 
+class ArchitectureComponent(BaseModel):
+    """A proposed component of the smallest practical implementation.
+
+    Technology recommendations require verification before adoption.
+    """
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+    )
+
+    name: str = Field(min_length=1)
+    responsibility: str = Field(min_length=1)
+    suggested_technology: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+
 class MVPBrief(BaseModel):
     """An implementation proposal for a selected product idea.
 
@@ -123,6 +142,10 @@ class MVPBrief(BaseModel):
     constraints: list[str] = Field(default_factory=list)
     risks: list[str] = Field(min_length=1)
     acceptance_criteria: list[str] = Field(min_length=1)
+    suggested_architecture: list[ArchitectureComponent] = Field(
+        default_factory=list,
+        max_length=6,
+    )
 
     @field_validator(
         "features",
