@@ -50,7 +50,11 @@ Hypothesis references may be empty.
 Do not include idea_id, constraints, or user_confirmed; application code
 assigns those fields.
 
-If the selected idea has hypothesis references, include at least one
-related proposed or supported hypothesis in metaphor_origin.hypothesis_ids.
-Preserve the meaning behind that reference in meaning_basis and
-mechanic_mapping. Do not replace it with an unrelated interpretation.
+Preserve all image IDs and hypothesis IDs linked to the selected idea
+in metaphor_origin. Do not silently drop part of its meaning foundation.
+
+Explain how the referenced meanings work together in the product mechanics,
+rather than merely listing sources.
+
+Do not add unrelated images or meanings. If a linked hypothesis is
+unsupported or superseded, do not use it as a foundation.

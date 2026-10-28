@@ -86,6 +86,8 @@ def parse_product_ideas(
     new_hypotheses: list[Hypothesis] = []
 
     for proposal in parsed.ideas:
+        idea_image_ids = list(proposal.image_ids)
+
         for image_id in proposal.image_ids:
             if image_id not in existing_image_ids:
                 raise ValueError("Idea references a missing image.")
@@ -100,6 +102,13 @@ def parse_product_ideas(
 
             if hypothesis.status not in ("proposed", "supported"):
                 raise ValueError("Idea references an inactive hypothesis.")
+
+            for image_id in hypothesis.image_ids:
+                if image_id not in existing_image_ids:
+                    raise ValueError("Idea hypothesis references a missing image.")
+
+                if image_id not in idea_image_ids:
+                    idea_image_ids.append(image_id)
 
         for proposed_meaning in proposal.new_hypotheses:
             for image_id in proposed_meaning.image_ids:
@@ -130,7 +139,7 @@ def parse_product_ideas(
                 title=proposal.title,
                 description=proposal.description,
                 goal_alignment=proposal.goal_alignment,
-                image_ids=proposal.image_ids,
+                image_ids=idea_image_ids,
                 hypothesis_ids=linked_ids,
             )
         )

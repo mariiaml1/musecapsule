@@ -114,9 +114,7 @@ def test_parse_product_ideas_returns_grounded_ideas():
         strict=True,
     ):
         assert idea.title == "Inspectable AI Sandbox"
-        assert idea.description == (
-            "A local tool for inspecting small AI experiments."
-        )
+        assert idea.description == ("A local tool for inspecting small AI experiments.")
         assert idea.goal_alignment == (
             "A bounded AI portfolio project for solo development."
         )
@@ -241,3 +239,73 @@ def test_proposed_idea_accepts_new_grounded_hypothesis():
     meaning = proposal.new_hypotheses[0]
     assert meaning.image_ids == [image_id]
     assert meaning.evidence[0].message_id == message_id
+
+
+def test_parse_product_ideas_preserves_all_images_of_existing_hypothesis():
+    note_image_id = uuid4()
+    capsule_image_id = uuid4()
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image_note = ImageFragment(
+        id=capsule_image_id,
+        label="Golden note",
+        evidence=[source],
+    )
+    capsule_source = EvidenceRef(
+        message_id=message.id,
+        quote="a transparent capsule",
+    )
+    image_capsule = ImageFragment(
+        id=capsule_image_id,
+        label="Transparent capsule",
+        evidence=[capsule_source],
+    )
+    hypothesis = Hypothesis(
+        statement=(
+            "The note inside the capsule could represent "
+            "a valuable result within a bounded workspace."
+        ),
+        image_ids=[image_note.id, image_capsule.id],
+        evidence=[source, capsule_source],
+    )
+    raw_response = json.dumps(
+        {
+            "ideas": [
+                {
+                    "title": "Inspectable AI Sandbox",
+                    "description": "A local tool for inspecting small AI experiments.",
+                    "goal_alignment": "A bounded AI portfolio project for solo development.",
+                    "image_ids": [str(image_note.id)],
+                    "hypothesis_ids": [str(hypothesis.id)],
+                    "new_hypotheses": [],
+                },
+                {
+                    "title": "Inspectable AI Sandbox",
+                    "description": "A local tool for inspecting small AI experiments.",
+                    "goal_alignment": "A bounded AI portfolio project for solo development.",
+                    "image_ids": [str(image_note.id)],
+                    "hypothesis_ids": [str(hypothesis.id)],
+                    "new_hypotheses": [],
+                },
+            ]
+        }
+    )
+    parsed = parse_product_ideas(
+        raw_response,
+        images=[image_capsule, image_note],
+        messages=[message],
+        hypotheses=[hypothesis],
+    )
+
+    assert set(parsed.ideas[0].image_ids) == {
+        image_note.id,
+        image_capsule.id,
+    }
+    assert parsed.ideas[0].hypothesis_ids == [hypothesis.id]
+    assert parsed.new_hypotheses == []

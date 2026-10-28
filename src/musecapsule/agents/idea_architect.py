@@ -53,11 +53,6 @@ def parse_blueprint_response(
     parsed = BlueprintResponse.model_validate_json(raw_response)
     origin = parsed.metaphor_origin
 
-    if idea.hypothesis_ids and not origin.hypothesis_ids:
-        raise ValueError(
-            "Blueprint must reference at least one of the idea's hypotheses."
-        )
-
     existing_image_ids = {image.id for image in images}
     idea_image_ids = set(idea.image_ids)
     idea_hypothesis_ids = set(idea.hypothesis_ids)
@@ -84,6 +79,12 @@ def parse_blueprint_response(
 
         if hypothesis.status not in ("proposed", "supported"):
             raise ValueError("Blueprint references an inactive hypothesis.")
+
+    if set(origin.image_ids) != set(idea.image_ids):
+        raise ValueError("Blueprint must preserve all images linked to the idea.")
+
+    if set(origin.hypothesis_ids) != set(idea.hypothesis_ids):
+        raise ValueError("Blueprint must preserve all hypotheses linked to the idea.")
 
     return MVPBrief(
         idea_id=idea.id,

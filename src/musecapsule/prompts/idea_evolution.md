@@ -67,3 +67,8 @@ return new_hypotheses as an empty list.
 Never leave both hypothesis_ids and new_hypotheses empty.
 Do not assign IDs or statuses to new hypotheses or IDs to ideas.
 Application code assigns them.
+
+Consider meaningful relationships between multiple images when they
+suggest a distinct product mechanism. A hypothesis may combine several
+images. Do not force combinations or include images without a clear role.
+Explain how the combined meanings contribute to the idea.
