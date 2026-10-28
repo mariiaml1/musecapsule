@@ -4,6 +4,7 @@ from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 
+from musecapsule.agents.idea_architect import generate_blueprint
 from musecapsule.agents.idea_evolution import generate_product_ideas
 from musecapsule.agents.imagination_guide import generate_exploration_question
 from musecapsule.agents.metaphor_explorer import (
@@ -14,6 +15,7 @@ from musecapsule.agents.metaphor_explorer import (
 from musecapsule.models import Message
 from musecapsule.state import (
     SessionState,
+    append_blueprint,
     append_hypothesis,
     append_image_fragment,
     append_message,
@@ -26,7 +28,14 @@ class ExplorationState(TypedDict):
     """Workflow input and session data for an exploration command."""
 
     session: SessionState
-    command: NotRequired[Literal["explore", "generate_ideas", "select_idea"]]
+    command: NotRequired[
+        Literal[
+            "explore",
+            "generate_ideas",
+            "select_idea",
+            "build_blueprint",
+        ]
+    ]
     idea_id: NotRequired[UUID]
     incoming_message: NotRequired[Message]
 
@@ -38,6 +47,7 @@ def build_exploration_graph(
     generate_revisions: Callable[[str], str],
     generate_question: Callable[[str], str],
     generate_ideas: Callable[[str], str],
+    generate_architecture: Callable[[str], str],
 ):
     """Compile an exploration workflow for one user message."""
 
@@ -141,9 +151,12 @@ def build_exploration_graph(
 
     def route_command(
         state: ExplorationState,
-    ) -> Literal["explore_images", "create_ideas", "select_idea"]:
+    ) -> Literal["explore_images", "create_ideas", "select_idea", "build_blueprint"]:
         """Route an explicit command and validate its required input."""
         command = state.get("command", "explore")
+
+        if command == "build_blueprint":
+            return "build_blueprint"
 
         if command == "generate_ideas":
             if not state["session"].images:
@@ -183,6 +196,33 @@ def build_exploration_graph(
             "session": append_product_ideas(session, ideas),
         }
 
+    def build_blueprint(state: ExplorationState) -> dict:
+        """Build and save a blueprint for the explicitly selected idea."""
+        session = state["session"]
+
+        if session.selected_idea_id is None:
+            raise ValueError("An idea must be selected before building a blueprint.")
+
+        idea = next(
+            (item for item in session.ideas if item.id == session.selected_idea_id),
+            None,
+        )
+        if idea is None:
+            raise ValueError("Selected idea does not exist.")
+
+        brief = generate_blueprint(
+            idea,
+            session.intent,
+            messages=session.messages,
+            images=session.images,
+            hypotheses=session.hypotheses,
+            generate=generate_architecture,
+        )
+
+        return {
+            "session": append_blueprint(session, brief),
+        }
+
     builder = StateGraph(ExplorationState)
 
     builder.add_node("explore_images", explore_images)
@@ -191,6 +231,8 @@ def build_exploration_graph(
     builder.add_node("ask_question", ask_question)
     builder.add_node("create_ideas", create_ideas)
     builder.add_node("select_idea", select_idea)
+    builder.add_node("build_blueprint", build_blueprint)
+    builder.add_edge("build_blueprint", END)
 
     builder.add_conditional_edges(START, route_command)
     builder.add_conditional_edges("explore_images", route_after_images)
@@ -199,5 +241,6 @@ def build_exploration_graph(
     builder.add_edge("revise_hypotheses", "ask_question")
     builder.add_edge("select_idea", END)
     builder.add_edge("create_ideas", END)
+    builder.add_edge("build_blueprint", END)
 
     return builder.compile()

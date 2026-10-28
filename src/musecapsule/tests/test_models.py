@@ -12,6 +12,7 @@ from musecapsule.models import (
     Intent,
     MVPBrief,
     Message,
+    MetaphorOrigin,
 )
 
 
@@ -237,6 +238,15 @@ def test_mvp_brief_rejects_blank_list_items(field_name):
         "constraints": ["Solo development"],
         "risks": ["Model responses may be invalid"],
         "acceptance_criteria": ["A valid result can be saved and reopened"],
+        "idea_summary": "A local workspace for developing one selected idea.",
+        "metaphor_origin": {
+            "image_ids": [uuid4()],
+            "hypothesis_ids": [],
+            "meaning_basis": "Selecting one valuable fragment to develop.",
+            "mechanic_mapping": (
+                "The user selects one idea and receives an implementation brief."
+            ),
+        },
     }
     fields[field_name] = ["Valid item", "   "]
 
@@ -269,3 +279,16 @@ def test_external_check_requires_reason_when_unavailable(reason):
             query="local AI experiment inspection tools",
             reason=reason,
         )
+
+
+def test_metaphor_origin_does_not_assume_user_confirmation():
+    origin = MetaphorOrigin(
+        image_ids=[uuid4()],
+        meaning_basis="Selecting one valuable fragment to develop.",
+        mechanic_mapping=(
+            "The user selects one idea and receives an implementation brief."
+        ),
+    )
+
+    assert origin.user_confirmed is False
+    assert origin.hypothesis_ids == []

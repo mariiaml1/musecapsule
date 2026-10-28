@@ -7,11 +7,14 @@ from musecapsule.models import (
     Hypothesis,
     ImageFragment,
     Intent,
+    MVPBrief,
     Message,
+    MetaphorOrigin,
     ProductIdea,
 )
 from musecapsule.state import (
     SessionState,
+    append_blueprint,
     append_hypothesis,
     append_image_fragment,
     append_message,
@@ -877,3 +880,97 @@ def test_select_product_idea_is_noop_for_current_selection():
 
     assert repeated is selected
     assert repeated.revision == selected.revision
+
+
+def test_append_blueprint_preserves_previous_versions():
+    message_id = uuid4()
+    image_id = uuid4()
+    hypothesis_id = uuid4()
+    idea_id = uuid4()
+    intent_constraints = ["Local execution"]
+
+    evidence = EvidenceRef(
+        message_id=message_id,
+        quote="A golden note",
+    )
+
+    previous_brief = MVPBrief(
+        idea_id=idea_id,
+        idea_summary="A local workspace for inspecting one AI experiment.",
+        metaphor_origin=MetaphorOrigin(
+            image_ids=[image_id],
+            hypothesis_ids=[],
+            meaning_basis="One valuable result inside a bounded space.",
+            mechanic_mapping=(
+                "Each workspace contains one experiment and its saved result."
+            ),
+            user_confirmed=False,
+        ),
+        problem="Small AI experiments are difficult to organize and revisit.",
+        audience="Developers building AI portfolio projects.",
+        core_scenario="Run an experiment, save its result, and reopen it.",
+        features=[
+            "Run one experiment",
+            "Save and reopen its result",
+        ],
+        constraints=list(intent_constraints),
+        risks=["Model responses may be invalid."],
+        acceptance_criteria=[
+            "A saved experiment result can be reopened.",
+        ],
+    )
+
+    new_brief = previous_brief.model_copy(deep=True)
+    new_brief.problem = "New problem"
+
+    state = SessionState(
+        intent=Intent(
+            goal="Build an AI-agent portfolio project",
+            constraints=intent_constraints,
+        ),
+        messages=[
+            Message(
+                id=message_id,
+                role="user",
+                text="A golden note floats inside the capsule.",
+            )
+        ],
+        images=[
+            ImageFragment(
+                id=image_id,
+                label="Golden note",
+                evidence=[evidence],
+            )
+        ],
+        hypotheses=[
+            Hypothesis(
+                id=hypothesis_id,
+                statement="The note may represent a selectable idea.",
+                evidence=[evidence],
+                image_ids=[image_id],
+            )
+        ],
+        ideas=[
+            ProductIdea(
+                id=idea_id,
+                title="Inspectable AI Sandbox",
+                description="A local tool for inspecting small AI experiments.",
+                goal_alignment="A bounded AI portfolio project for solo development.",
+                image_ids=[image_id],
+                hypothesis_ids=[hypothesis_id],
+            )
+        ],
+        selected_idea_id=idea_id,
+        briefs=[previous_brief],
+    )
+
+    updated = append_blueprint(state, new_brief)
+
+    assert updated.briefs == [previous_brief, new_brief]
+    assert state.briefs == [previous_brief]
+    assert updated.revision == state.revision + 1
+    assert state.briefs[0].problem == (
+        "Small AI experiments are difficult to organize and revisit."
+    )
+    assert updated.briefs[1].problem == "New problem"
+    assert state.revision == 0

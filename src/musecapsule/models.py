@@ -90,6 +90,21 @@ class ProductIdea(BaseModel):
     hypothesis_ids: list[UUID] = Field(default_factory=list)
 
 
+class MetaphorOrigin(BaseModel):
+    """Trace the proposed product mechanics back to narrative sources.
+
+    User confirmation must be assigned by application code.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    image_ids: list[UUID] = Field(min_length=1)
+    hypothesis_ids: list[UUID] = Field(default_factory=list)
+    meaning_basis: str = Field(min_length=1)
+    mechanic_mapping: str = Field(min_length=1)
+    user_confirmed: bool = False
+
+
 class MVPBrief(BaseModel):
     """An implementation proposal for a selected product idea.
 
@@ -99,11 +114,13 @@ class MVPBrief(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     idea_id: UUID
+    idea_summary: str = Field(min_length=1)
+    metaphor_origin: MetaphorOrigin
     problem: str = Field(min_length=1)
     audience: str = Field(min_length=1)
     core_scenario: str = Field(min_length=1)
     features: list[str] = Field(min_length=1, max_length=5)
-    constraints: list[str] = Field(min_length=1)
+    constraints: list[str] = Field(default_factory=list)
     risks: list[str] = Field(min_length=1)
     acceptance_criteria: list[str] = Field(min_length=1)
 

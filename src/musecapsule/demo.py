@@ -50,6 +50,7 @@ def main() -> None:
         generate_hypotheses=create_generator("hypothesis_proposals.md"),
         generate_question=create_generator("imagination_guide.md"),
         generate_ideas=create_generator("idea_evolution.md"),
+        generate_architecture=create_generator("idea_architect.md"),
     )
 
     session = SessionState(
@@ -94,6 +95,43 @@ def main() -> None:
         }
     )
     updated_session = idea_result["session"]
+
+    print("\nGenerated ideas:")
+    for index, idea in enumerate(updated_session.ideas, start=1):
+        print(f"\n{index}. {idea.title}")
+        print(idea.description)
+
+    while True:
+        try:
+            choice = int(input("\nChoose an idea number: "))
+        except ValueError:
+            print("Enter a whole number.")
+            continue
+
+        if 1 <= choice <= len(updated_session.ideas):
+            break
+
+        print(f"Enter a number from 1 to {len(updated_session.ideas)}.")
+
+    chosen_idea = updated_session.ideas[choice - 1]
+
+    selection_result = graph.invoke(
+        {
+            "session": updated_session,
+            "command": "select_idea",
+            "idea_id": chosen_idea.id,
+        }
+    )
+    updated_session = selection_result["session"]
+
+    blueprint_result = graph.invoke(
+        {
+            "session": updated_session,
+            "command": "build_blueprint",
+        }
+    )
+
+    updated_session = blueprint_result["session"]
 
     print(updated_session.model_dump_json(indent=2))
 

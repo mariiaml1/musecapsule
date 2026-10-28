@@ -10,6 +10,7 @@ from musecapsule.models import (
     HypothesisRevision,
     ImageFragment,
     Intent,
+    MVPBrief,
     Message,
     ProductIdea,
 )
@@ -25,6 +26,7 @@ class SessionState(BaseModel):
     hypothesis_history: list[HypothesisRevision] = Field(default_factory=list)
     ideas: list[ProductIdea] = Field(default_factory=list)
     selected_idea_id: UUID | None = None
+    briefs: list[MVPBrief] = Field(default_factory=list)
 
 
 def append_message(
@@ -50,6 +52,7 @@ def append_message(
         hypothesis_history=state.hypothesis_history,
         ideas=state.ideas,
         selected_idea_id=state.selected_idea_id,
+        briefs=state.briefs,
         messages=[*state.messages, message],
         revision=state.revision + 1,
     )
@@ -91,6 +94,7 @@ def append_image_fragment(
         ideas=state.ideas,
         selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
+        briefs=state.briefs,
         images=[*state.images, fragment],
         revision=state.revision + 1,
     )
@@ -139,6 +143,7 @@ def append_hypothesis(
         ideas=state.ideas,
         selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
+        briefs=state.briefs,
         hypotheses=[*state.hypotheses, hypothesis],
         images=state.images,
         revision=state.revision + 1,
@@ -210,6 +215,7 @@ def revise_hypothesis_status(
         messages=state.messages,
         ideas=state.ideas,
         selected_idea_id=state.selected_idea_id,
+        briefs=state.briefs,
         hypothesis_history=[*state.hypothesis_history, revision_entry],
         hypotheses=updated_hypotheses,
         images=state.images,
@@ -262,6 +268,7 @@ def append_product_ideas(
         hypotheses=state.hypotheses,
         selected_idea_id=state.selected_idea_id,
         hypothesis_history=state.hypothesis_history,
+        briefs=state.briefs,
         ideas=[*state.ideas, *ideas],
         revision=state.revision + 1,
     )
@@ -293,5 +300,44 @@ def select_product_idea(
         hypothesis_history=state.hypothesis_history,
         ideas=state.ideas,
         selected_idea_id=idea_id,
+        briefs=state.briefs,
+        revision=state.revision + 1,
+    )
+
+
+def append_blueprint(
+    state: SessionState,
+    brief: MVPBrief,
+) -> SessionState:
+    """Append a blueprint version for the currently selected idea.
+
+    Preserve previous versions and the input session.
+
+    Raises:
+        ValueError: If the selected idea is missing, the brief references
+            another idea, or its constraints differ from the user's intent.
+    """
+    if state.selected_idea_id is None:
+        raise ValueError("An idea must be selected before building a blueprint.")
+
+    if not any(idea.id == state.selected_idea_id for idea in state.ideas):
+        raise ValueError("Selected idea does not exist.")
+
+    if brief.idea_id != state.selected_idea_id:
+        raise ValueError("Blueprint must reference the selected idea.")
+
+    if brief.constraints != state.intent.constraints:
+        raise ValueError("Blueprint must preserve the user's constraints.")
+
+    return SessionState(
+        id=state.id,
+        intent=state.intent,
+        messages=state.messages,
+        images=state.images,
+        hypotheses=state.hypotheses,
+        hypothesis_history=state.hypothesis_history,
+        ideas=state.ideas,
+        selected_idea_id=state.selected_idea_id,
+        briefs=[*state.briefs, brief],
         revision=state.revision + 1,
     )

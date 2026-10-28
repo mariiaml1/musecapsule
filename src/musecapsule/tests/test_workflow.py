@@ -86,12 +86,16 @@ def test_initial_exploration_graph_preserves_sources_and_orders_steps():
     def generate_ideas(_: str) -> str:
         pytest.fail("Idea generation must not run during exploration.")
 
+    def unexpected_architecture(_: str) -> str:
+        pytest.fail("Blueprint generation must not run on this route.")
+
     graph = build_exploration_graph(
         generate_revisions=generate_revisions,
         generate_images=generate_images,
         generate_hypotheses=generate_hypotheses,
         generate_question=generate_question,
         generate_ideas=generate_ideas,
+        generate_architecture=unexpected_architecture,
     )
 
     result = graph.invoke(
@@ -202,12 +206,16 @@ def test_exploration_graph_revises_existing_hypothesis():
     def generate_ideas(_: str) -> str:
         pytest.fail("Idea generation must not run during exploration.")
 
+    def unexpected_architecture(_: str) -> str:
+        pytest.fail("Blueprint generation must not run on this route.")
+
     graph = build_exploration_graph(
         generate_images=generate_images,
         generate_hypotheses=generate_hypotheses,
         generate_revisions=generate_revisions,
         generate_question=generate_question,
         generate_ideas=generate_ideas,
+        generate_architecture=unexpected_architecture,
     )
     result = graph.invoke(
         {
@@ -309,12 +317,16 @@ def test_exploration_graph_generates_ideas_without_exploration():
             }
         )
 
+    def unexpected_architecture(_: str) -> str:
+        pytest.fail("Blueprint generation must not run on this route.")
+
     graph = build_exploration_graph(
         generate_images=unexpected_generation,
         generate_hypotheses=unexpected_generation,
         generate_revisions=unexpected_generation,
         generate_question=unexpected_generation,
         generate_ideas=generate_ideas,
+        generate_architecture=unexpected_architecture,
     )
 
     result = graph.invoke(
@@ -382,12 +394,16 @@ def test_exploration_graph_selects_idea_without_generation():
     def unexpected_generation(_: str) -> str:
         pytest.fail("Selection must not invoke generation.")
 
+    def unexpected_architecture(_: str) -> str:
+        pytest.fail("Blueprint generation must not run on this route.")
+
     graph = build_exploration_graph(
         generate_images=unexpected_generation,
         generate_hypotheses=unexpected_generation,
         generate_revisions=unexpected_generation,
         generate_question=unexpected_generation,
         generate_ideas=unexpected_generation,
+        generate_architecture=unexpected_architecture,
     )
 
     result = graph.invoke(
@@ -404,3 +420,104 @@ def test_exploration_graph_selects_idea_without_generation():
     assert updated.messages == session.messages
     assert updated.ideas == session.ideas
     assert session.selected_idea_id is None
+
+
+def test_exploration_graph_builds_blueprint_for_selected_idea():
+    message = Message(
+        role="user",
+        text="A golden note floats inside a capsule.",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[
+            EvidenceRef(
+                message_id=message.id,
+                quote="A golden note",
+            )
+        ],
+    )
+    idea = ProductIdea(
+        title="Experiment Capsule",
+        description="A local workspace for one AI experiment.",
+        goal_alignment="A bounded portfolio project for solo development.",
+        image_ids=[image.id],
+        hypothesis_ids=[],
+    )
+    session = SessionState(
+        intent=Intent(
+            goal="Build an AI portfolio project",
+            constraints=["Solo development", "Local execution"],
+        ),
+        messages=[message],
+        images=[image],
+        ideas=[idea],
+        selected_idea_id=idea.id,
+    )
+    before = session.model_dump()
+    calls: list[str] = []
+
+    def unexpected_generation(_: str) -> str:
+        pytest.fail("Other AI roles must not run during blueprint generation.")
+
+    def generate_architecture(context: str) -> str:
+        calls.append("architect")
+        payload = json.loads(context)
+
+        assert payload["idea"]["id"] == str(idea.id)
+        assert payload["intent"] == session.intent.model_dump(mode="json")
+        assert payload["images"][0]["id"] == str(image.id)
+        assert payload["messages"][0]["text"] == message.text
+
+        return json.dumps(
+            {
+                "idea_summary": "A local workspace for one AI experiment.",
+                "metaphor_origin": {
+                    "image_ids": [str(image.id)],
+                    "hypothesis_ids": [],
+                    "meaning_basis": "One valuable result in a bounded space.",
+                    "mechanic_mapping": (
+                        "One workspace contains one experiment and its result."
+                    ),
+                },
+                "problem": "Small AI experiments are difficult to revisit.",
+                "audience": "Developers building AI prototypes.",
+                "core_scenario": "Run, save, and reopen an experiment.",
+                "features": ["Save and reopen an experiment result"],
+                "risks": ["Model responses may be invalid"],
+                "acceptance_criteria": [
+                    "A saved result can be reopened without another LLM call"
+                ],
+            }
+        )
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=unexpected_generation,
+        generate_architecture=generate_architecture,
+    )
+
+    result = graph.invoke(
+        {
+            "session": session,
+            "command": "build_blueprint",
+        }
+    )
+    updated = result["session"]
+
+    assert calls == ["architect"]
+    assert len(updated.briefs) == 1
+
+    brief = updated.briefs[0]
+    assert brief.idea_id == idea.id
+    assert brief.constraints == session.intent.constraints
+    assert brief.metaphor_origin.image_ids == [image.id]
+    assert brief.metaphor_origin.user_confirmed is False
+
+    assert updated.selected_idea_id == idea.id
+    assert updated.messages == session.messages
+    assert updated.ideas == session.ideas
+    assert updated.revision == session.revision + 1
+    assert session.model_dump() == before
