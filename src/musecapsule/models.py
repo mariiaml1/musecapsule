@@ -1,7 +1,7 @@
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Intent(BaseModel):
@@ -122,3 +122,54 @@ class MVPBrief(BaseModel):
             raise ValueError("Brief list items must not be blank.")
 
         return normalized
+
+
+class SimilarSolution(BaseModel):
+    """A similar solution returned by an external search adapter."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+    snippet: str = Field(min_length=1)
+
+
+class ExternalCheck(BaseModel):
+    """The recorded outcome of an external search attempt.
+
+    Assigned by application code, never inferred from an LLM response.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    idea_id: UUID
+    status: Literal["not_run", "completed", "unavailable"]
+    query: str | None = None
+    results: list[SimilarSolution] = Field(default_factory=list)
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_search_outcome(self) -> Self:
+        """Require fields consistent with the recorded search status."""
+        if self.status == "not_run":
+            if self.query is not None or self.results or self.reason is not None:
+                raise ValueError(
+                    "A check that was not run must not contain search data."
+                )
+            return self
+
+        if self.query is None or not self.query.strip():
+            raise ValueError("An attempted search requires a nonblank query.")
+
+        if self.status == "completed":
+            if self.reason is not None:
+                raise ValueError("A completed search must not contain an error reason.")
+            return self
+
+        if self.results:
+            raise ValueError("An unavailable search must not contain results.")
+
+        if self.reason is None or not self.reason.strip():
+            raise ValueError("An unavailable search requires a nonblank reason.")
+
+        return self

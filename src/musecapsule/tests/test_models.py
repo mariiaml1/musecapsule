@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from musecapsule.evidence import validate_evidence
 from musecapsule.models import (
     EvidenceRef,
+    ExternalCheck,
     Hypothesis,
     ImageFragment,
     Intent,
@@ -244,3 +245,27 @@ def test_mvp_brief_rejects_blank_list_items(field_name):
         match="Brief list items must not be blank.",
     ):
         MVPBrief.model_validate(fields)
+
+
+def test_external_check_accepts_completed_search_without_results():
+    check = ExternalCheck(
+        idea_id=uuid4(),
+        status="completed",
+        query="local AI experiment inspection tools",
+    )
+
+    assert check.results == []
+
+
+@pytest.mark.parametrize("reason", [None, "", "   "])
+def test_external_check_requires_reason_when_unavailable(reason):
+    with pytest.raises(
+        ValidationError,
+        match="An unavailable search requires a nonblank reason.",
+    ):
+        ExternalCheck(
+            idea_id=uuid4(),
+            status="unavailable",
+            query="local AI experiment inspection tools",
+            reason=reason,
+        )
