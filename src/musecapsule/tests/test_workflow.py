@@ -559,3 +559,200 @@ def test_exploration_graph_builds_blueprint_for_selected_idea():
     assert updated.ideas == session.ideas
     assert updated.revision == session.revision + 1
     assert session.model_dump() == before
+
+
+def test_workflow_preserves_combined_origin_from_idea_to_blueprint():
+    message = Message(
+        role="user",
+        text="A golden note floats inside an opaque capsule.",
+    )
+    note_source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    capsule_source = EvidenceRef(
+        message_id=message.id,
+        quote="an opaque capsule",
+    )
+    note = ImageFragment(
+        label="Golden note",
+        evidence=[note_source],
+    )
+    capsule = ImageFragment(
+        label="Opaque capsule",
+        evidence=[capsule_source],
+    )
+    existing_hypothesis = Hypothesis(
+        statement="The golden note could represent one valuable result.",
+        image_ids=[note.id],
+        evidence=[note_source],
+    )
+    session = SessionState(
+        intent=Intent(
+            goal="Build an AI portfolio project",
+            constraints=["Solo development", "Local execution"],
+        ),
+        messages=[message],
+        images=[note, capsule],
+        hypotheses=[existing_hypothesis],
+    )
+    before = session.model_dump()
+    calls: list[str] = []
+
+    def unexpected_generation(_: str) -> str:
+        pytest.fail("Exploration must not run on these command routes.")
+
+    def generate_ideas(context: str) -> str:
+        calls.append("ideas")
+        payload = json.loads(context)
+
+        assert {item["id"] for item in payload["images"]} == {
+            str(note.id),
+            str(capsule.id),
+        }
+        assert payload["hypotheses"][0]["id"] == str(existing_hypothesis.id)
+
+        return json.dumps(
+            {
+                "ideas": [
+                    {
+                        "title": "Sealed Result",
+                        "description": (
+                            "Process one note locally and reveal one useful "
+                            "result only when the user requests it."
+                        ),
+                        "goal_alignment": "A bounded local AI portfolio project.",
+                        "image_ids": [str(note.id), str(capsule.id)],
+                        "hypothesis_ids": [str(existing_hypothesis.id)],
+                        "new_hypotheses": [
+                            {
+                                "statement": (
+                                    "The note within an opaque capsule could "
+                                    "represent a valuable result withheld "
+                                    "until a deliberate reveal."
+                                ),
+                                "image_ids": [str(note.id), str(capsule.id)],
+                                "evidence": [
+                                    note_source.model_dump(mode="json"),
+                                    capsule_source.model_dump(mode="json"),
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "One Note Summary",
+                        "description": "Turn one note into one concise summary.",
+                        "goal_alignment": "A small local summarization project.",
+                        "image_ids": [str(note.id)],
+                        "hypothesis_ids": [str(existing_hypothesis.id)],
+                        "new_hypotheses": [],
+                    },
+                ]
+            }
+        )
+
+    def generate_architecture(context: str) -> str:
+        calls.append("architect")
+        payload = json.loads(context)
+
+        image_ids = {str(note.id), str(capsule.id)}
+        hypothesis_ids = set(payload["idea"]["hypothesis_ids"])
+
+        assert payload["idea"]["title"] == "Sealed Result"
+        assert set(payload["idea"]["image_ids"]) == image_ids
+        assert len(hypothesis_ids) == 2
+        assert str(existing_hypothesis.id) in hypothesis_ids
+
+        assert {item["id"] for item in payload["images"]} == image_ids
+        assert {item["id"] for item in payload["hypotheses"]} == hypothesis_ids
+
+        new_meaning = next(
+            item
+            for item in payload["hypotheses"]
+            if item["id"] != str(existing_hypothesis.id)
+        )
+        assert set(new_meaning["image_ids"]) == image_ids
+        assert new_meaning["status"] == "proposed"
+
+        return json.dumps(
+            {
+                "idea_summary": "Reveal one useful result from a local note.",
+                "metaphor_origin": {
+                    "image_ids": payload["idea"]["image_ids"],
+                    "hypothesis_ids": payload["idea"]["hypothesis_ids"],
+                    "meaning_basis": (
+                        "A valuable result remains enclosed until requested."
+                    ),
+                    "mechanic_mapping": (
+                        "Process the note locally, keep the result hidden, "
+                        "and reveal it on the user's explicit action."
+                    ),
+                },
+                "problem": "Users need a focused takeaway from one note.",
+                "audience": "People organizing personal notes.",
+                "core_scenario": (
+                    "Import a note, generate a result, and choose to reveal it."
+                ),
+                "features": ["Local processing", "User-controlled reveal"],
+                "risks": ["The generated takeaway may be inaccurate"],
+                "acceptance_criteria": [
+                    "The generated result stays hidden until reveal is selected"
+                ],
+            }
+        )
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=generate_ideas,
+        generate_architecture=generate_architecture,
+    )
+
+    generated = graph.invoke({"session": session, "command": "generate_ideas"})[
+        "session"
+    ]
+
+    chosen = next(idea for idea in generated.ideas if idea.title == "Sealed Result")
+    new_hypotheses = [
+        item for item in generated.hypotheses if item.id != existing_hypothesis.id
+    ]
+
+    assert len(new_hypotheses) == 1
+    new_hypothesis = new_hypotheses[0]
+
+    expected_images = {note.id, capsule.id}
+    expected_hypotheses = {existing_hypothesis.id, new_hypothesis.id}
+
+    assert set(chosen.image_ids) == expected_images
+    assert set(chosen.hypothesis_ids) == expected_hypotheses
+    assert set(new_hypothesis.image_ids) == expected_images
+    assert new_hypothesis.evidence == [note_source, capsule_source]
+
+    selected = graph.invoke(
+        {
+            "session": generated,
+            "command": "select_idea",
+            "idea_id": chosen.id,
+        }
+    )["session"]
+
+    completed = graph.invoke({"session": selected, "command": "build_blueprint"})[
+        "session"
+    ]
+
+    assert calls == ["ideas", "architect"]
+    assert len(completed.briefs) == 1
+
+    brief = completed.briefs[0]
+    assert brief.idea_id == chosen.id
+    assert set(brief.metaphor_origin.image_ids) == expected_images
+    assert set(brief.metaphor_origin.hypothesis_ids) == expected_hypotheses
+    assert brief.metaphor_origin.user_confirmed is False
+    assert brief.constraints == session.intent.constraints
+
+    assert completed.selected_idea_id == chosen.id
+    assert completed.messages == session.messages
+    assert completed.revision == session.revision + 4
+    assert session.model_dump() == before

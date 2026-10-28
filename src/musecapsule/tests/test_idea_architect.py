@@ -422,3 +422,95 @@ def test_parse_blueprint_rejects_dropped_origin_image():
             images=[image_note, image_capsule],
             hypotheses=[first_hypothesis, second_hypothesis],
         )
+
+
+def test_parse_blueprint_rejects_dropped_origin_hypothesis():
+    intent = Intent(
+        goal="Build an AI portfolio project",
+        constraints=["Solo development", "Local execution"],
+    )
+    message = Message(
+        role="user",
+        text="A golden note floats inside a transparent capsule.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image_note = ImageFragment(
+        label="Golden note",
+        evidence=[source],
+    )
+    capsule_source = EvidenceRef(
+        message_id=message.id,
+        quote="a transparent capsule",
+    )
+    image_capsule = ImageFragment(
+        label="Transparent capsule",
+        evidence=[capsule_source],
+    )
+    first_hypothesis = Hypothesis(
+        statement=(
+            "The note inside the capsule could represent "
+            "a valuable result within a bounded workspace."
+        ),
+        image_ids=[image_note.id, image_capsule.id],
+        evidence=[source, capsule_source],
+    )
+    second_hypothesis = Hypothesis(
+        statement=(
+            "The capsule's transparency could represent "
+            "making an experiment's result inspectable."
+        ),
+        image_ids=[image_note.id, image_capsule.id],
+        evidence=[source, capsule_source],
+    )
+    idea = ProductIdea(
+        title="Inspectable AI Sandbox",
+        description="A local tool for inspecting small AI experiments.",
+        goal_alignment="A bounded AI portfolio project for solo development.",
+        image_ids=[image_note.id, image_capsule.id],
+        hypothesis_ids=[first_hypothesis.id, second_hypothesis.id],
+    )
+    raw_response = json.dumps(
+        {
+            "idea_summary": "A local workspace for inspecting AI experiments.",
+            "metaphor_origin": {
+                "meaning_basis": "One valuable result in a bounded space.",
+                "mechanic_mapping": (
+                    "Each workspace contains one experiment and its result."
+                ),
+                "image_ids": [str(image_note.id), str(image_capsule.id)],
+                "hypothesis_ids": [str(first_hypothesis.id)],
+            },
+            "problem": "Small AI experiments are difficult to organize.",
+            "audience": "Developers building AI prototypes.",
+            "core_scenario": "Run an experiment and inspect its saved result.",
+            "features": ["Run and save one experiment"],
+            "risks": ["Model responses may be invalid"],
+            "acceptance_criteria": ["A saved experiment result can be reopened"],
+        }
+    )
+
+    clarification = Message(
+        role="user",
+        text="The capsule is opaque, not transparent.",
+    )
+    received_contexts: list[dict] = []
+
+    def generate(context: str) -> str:
+        payload = json.loads(context)
+        received_contexts.append(payload)
+        return raw_response
+
+    with pytest.raises(
+        ValueError,
+        match="Blueprint must preserve all hypotheses linked to the idea.",
+    ):
+        parse_blueprint_response(
+            raw_response,
+            idea=idea,
+            intent=intent,
+            images=[image_note, image_capsule],
+            hypotheses=[first_hypothesis, second_hypothesis],
+        )
