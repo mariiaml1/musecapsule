@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from musecapsule.models import Intent, Message
-from musecapsule.state import SessionState
+from musecapsule.state import SessionState, select_product_idea
 from musecapsule.storage import SessionConflictError, SessionStore
 
 
@@ -27,10 +27,18 @@ class CreateMessageRequest(BaseModel):
         return value
 
 
+class SelectIdeaRequest(BaseModel):
+    """The user's explicit selection of an existing product idea."""
+
+    idea_id: UUID
+
+
 def create_app(
     database_path: Path = Path("data/musecapsule.db"),
     *,
     process_message: Callable[[SessionState, Message], SessionState] | None = None,
+    process_ideas: Callable[[SessionState], SessionState] | None = None,
+    process_blueprint: Callable[[SessionState], SessionState] | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -38,6 +46,47 @@ def create_app(
         title="MuseCapsule AI",
         version="0.1.0",
     )
+
+    def process_and_save(
+        session: SessionState,
+        operation: Callable[[SessionState], SessionState],
+    ) -> SessionState:
+        """Run an operation and persist a changed session with revision checking."""
+        try:
+            updated = operation(session)
+        except ValidationError as error:
+            raise HTTPException(
+                status_code=502,
+                detail="The model response failed validation.",
+            ) from error
+        except ValueError as error:
+            raise HTTPException(
+                status_code=502,
+                detail="The generated result contains invalid references.",
+            ) from error
+        except RuntimeError as error:
+            raise HTTPException(
+                status_code=502,
+                detail="Generation could not be completed.",
+            ) from error
+
+        if updated.revision == session.revision:
+            return updated
+
+        try:
+            store.save(
+                updated,
+                expected_revision=session.revision,
+            )
+        except SessionConflictError as error:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Session changed during processing. " "Reload it before retrying."
+                ),
+            ) from error
+
+        return updated
 
     @app.post(
         "/sessions",
@@ -80,7 +129,9 @@ def create_app(
                 detail="Session not found.",
             )
 
-        if process_message is None:
+        handler = process_message
+
+        if handler is None:
             raise HTTPException(
                 status_code=503,
                 detail="Message processing is not configured.",
@@ -88,35 +139,99 @@ def create_app(
 
         message = Message(role="user", text=request.text)
 
-        try:
-            updated = process_message(session, message)
-        except ValidationError as error:
-            raise HTTPException(
-                status_code=502,
-                detail="The model response failed validation.",
-            ) from error
-        except ValueError as error:
-            raise HTTPException(
-                status_code=502,
-                detail="The generated result contains invalid references.",
-            ) from error
-        except RuntimeError as error:
-            raise HTTPException(
-                status_code=502,
-                detail="Generation could not be completed.",
-            ) from error
+        def operation(current: SessionState) -> SessionState:
+            return handler(current, message)
 
-        try:
-            store.save(
-                updated,
-                expected_revision=session.revision,
+        return process_and_save(session, operation)
+
+    @app.post(
+        "/sessions/{session_id}/ideas",
+        response_model=SessionState,
+    )
+    def create_ideas(session_id: UUID) -> SessionState:
+        """Generate and persist an idea batch without another question."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
             )
-        except SessionConflictError as error:
+
+        if not session.images:
             raise HTTPException(
                 status_code=409,
-                detail="Session changed during processing. Reload it before retrying.",
-            ) from error
+                detail="Explore at least one image before requesting ideas.",
+            )
 
-        return updated
+        if process_ideas is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Idea generation is not configured.",
+            )
+
+        return process_and_save(session, process_ideas)
+
+    @app.post(
+        "/sessions/{session_id}/selection",
+        response_model=SessionState,
+    )
+    def select_idea(
+        session_id: UUID,
+        request: SelectIdeaRequest,
+    ) -> SessionState:
+        """Select an existing idea without invoking generation."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        if not any(idea.id == request.idea_id for idea in session.ideas):
+            raise HTTPException(
+                status_code=404,
+                detail="Idea not found in this session.",
+            )
+
+        def operation(current: SessionState) -> SessionState:
+            return select_product_idea(current, request.idea_id)
+
+        return process_and_save(session, operation)
+
+    @app.post(
+        "/sessions/{session_id}/briefs",
+        response_model=SessionState,
+    )
+    def create_blueprint(session_id: UUID) -> SessionState:
+        """Generate and persist a new blueprint for the selected idea."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        if session.selected_idea_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Select an idea before requesting a blueprint.",
+            )
+
+        if not any(idea.id == session.selected_idea_id for idea in session.ideas):
+            raise HTTPException(
+                status_code=409,
+                detail="The selected idea is missing from this session.",
+            )
+
+        if process_blueprint is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Blueprint generation is not configured.",
+            )
+
+        return process_and_save(session, process_blueprint)
 
     return app

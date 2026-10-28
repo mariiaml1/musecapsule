@@ -66,7 +66,29 @@ def create_local_app() -> FastAPI:
         )
         return result["session"]
 
+    def process_ideas(session: SessionState) -> SessionState:
+        """Generate ideas from the existing narrative context."""
+        result = graph.invoke(
+            {
+                "session": session,
+                "command": "generate_ideas",
+            }
+        )
+        return result["session"]
+
+    def process_blueprint(session: SessionState) -> SessionState:
+        """Build a blueprint without performing external research."""
+        result = graph.invoke(
+            {
+                "session": session,
+                "command": "build_blueprint",
+            }
+        )
+        return result["session"]
+
     return create_app(
         database_path,
         process_message=process_message,
+        process_ideas=process_ideas,
+        process_blueprint=process_blueprint,
     )
