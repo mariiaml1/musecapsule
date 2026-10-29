@@ -1,5 +1,6 @@
 import argparse
 from collections.abc import Callable
+import logging
 from pathlib import Path
 import sqlite3
 import sys
@@ -16,6 +17,11 @@ from musecapsule.workflow import build_exploration_graph
 
 def main() -> None:
     """Run an initial exploration through the compiled workflow."""
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
 
     parser = argparse.ArgumentParser(
         description="Explore a narrative through the MuseCapsule workflow.",

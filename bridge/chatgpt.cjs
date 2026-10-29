@@ -3,6 +3,20 @@ const { join } = require("node:path");
 const { readFileSync } = require("node:fs");
 const { pathToFileURL } = require("node:url");
 
+const { performance } = require("node:perf_hooks");
+
+/** Measure an operation without logging its inputs or outputs. */
+async function measure (stage, operation) {
+    const started = performance.now();
+
+    try {
+        return await operation();
+    } finally {
+        const elapsedMs = Math.round(performance.now() - started);
+        console.error(`MUSECAPSULE_TIMING ${stage} ${elapsedMs}`);
+    }
+}
+
 app.setName("MuseCapsule Connection Check");
 
 async function main () {
@@ -24,7 +38,7 @@ async function main () {
     }
 
 
-    await app.whenReady();
+    await measure("electron_ready", () => app.whenReady());
 
     // Load the SDK from the explicitly configured DevKit installation.
     const devkitDir = process.argv[2];
@@ -37,7 +51,10 @@ async function main () {
         join(devkitDir, "packages", "local", "dist", "index.js"),
     );
 
-    const { createChatGPT } = await import(sdkUrl.href);
+    const { createChatGPT } = await measure(
+        "sdk_import",
+        () => import(sdkUrl.href),
+    );
 
     const chatgpt = createChatGPT({
         appName: "MuseCapsule Connection Check",
@@ -54,11 +71,11 @@ async function main () {
         },
     });
 
-    let session = await chatgpt.getSession();
+    let session = await measure("get_session", () => chatgpt.getSession());
 
     if (session.status !== "connected") {
         console.error("Opening ChatGPT sign-in...");
-        session = await chatgpt.signIn();
+        session = await measure("sign_in", () => chatgpt.signIn());
     }
 
     console.error("Status:", session.status);
@@ -68,26 +85,15 @@ async function main () {
         throw new Error("ChatGPT plan usage was not enabled.");
     }
 
-    const models = await chatgpt.listModels({
-        signal: AbortSignal.timeout(30_000),
-    });
-
-
-    console.error("Available models:", models.map((model) => model.slug));
-
-    const model = models.find((item) => item.slug === request.model);
-
-    if (!model) {
-        throw new Error("Requested model is unavailable for this account.");
-    }
-
-    // Send one small request to verify inference access.
-    const result = await chatgpt.streamResponse({
-        model: model.slug,
-        instructions: request.instructions,
-        input: request.text,
-        signal: AbortSignal.timeout(60_000),
-    });
+    // Let the provider validate the explicitly requested model.
+    const result = await measure("generation", () =>
+        chatgpt.streamResponse({
+            model: request.model,
+            instructions: request.instructions,
+            input: request.text,
+            signal: AbortSignal.timeout(60_000),
+        }),
+    );
 
     // Reserve stdout for the model response consumed by Python.
     process.stdout.write(`${result.text}\n`);

@@ -2,6 +2,17 @@ import json
 import subprocess
 from pathlib import Path
 
+import logging
+import re
+from time import perf_counter
+
+logger = logging.getLogger(__name__)
+
+_TIMING_PATTERN = re.compile(
+    r"MUSECAPSULE_TIMING "
+    r"(electron_ready|sdk_import|get_session|sign_in|list_models|generation) "
+    r"([0-9]+)"
+)
 
 def request_generation(
     text: str,
@@ -33,6 +44,8 @@ def request_generation(
     if not all(path.is_file() for path in (executable, script, sdk_entry)):
         raise RuntimeError("ChatGPT bridge installation is incomplete.")
 
+    started = perf_counter()
+
     try:
         completed = subprocess.run(
             [str(executable), str(script), str(devkit_dir)],
@@ -55,6 +68,21 @@ def request_generation(
         raise RuntimeError("ChatGPT bridge timed out.") from error
     except OSError as error:
         raise RuntimeError("ChatGPT bridge could not be started.") from error
+    finally:
+        logger.info(
+            "llm_bridge total_ms=%.0f",
+            (perf_counter() - started) * 1000,
+        )
+
+    # Forward only recognized timing records, never arbitrary bridge stderr.
+    for line in completed.stderr.splitlines():
+        match = _TIMING_PATTERN.fullmatch(line)
+        if match:
+            logger.info(
+                "llm_bridge stage=%s elapsed_ms=%s",
+                match.group(1),
+                match.group(2),
+            )
 
     if completed.returncode != 0:
         raise RuntimeError(
