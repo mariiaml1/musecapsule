@@ -1,3 +1,10 @@
+## Demo
+
+[Watch or download the demo video](https://github.com/mariiaml1/musecapsule/releases/tag/v0.1.0)
+
+The release includes an MP4 walkthrough of metaphor exploration,
+real workflow execution, idea generation and engineering blueprint creation.
+
 # MuseCapsule AI — The AI Imagination Engine
 
 Turn spontaneous metaphors into traceable product ideas and engineering
