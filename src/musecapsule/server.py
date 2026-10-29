@@ -1,9 +1,10 @@
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from fastapi import FastAPI
 
+from musecapsule.agent_events import stream_graph_run
 from musecapsule.api import create_app
 from musecapsule.llm import request_generation
 from musecapsule.models import Message
@@ -86,9 +87,29 @@ def create_local_app() -> FastAPI:
         )
         return result["session"]
 
+    def stream_message(
+        session: SessionState,
+        text: str,
+        save_result: Callable[[SessionState], None],
+    ) -> Iterator[str]:
+        """Stream one exploration run and persist its final session."""
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "explore",
+                "incoming_message": Message(
+                    role="user",
+                    text=text,
+                ),
+            },
+            save_result,
+        )
+
     return create_app(
         database_path,
         process_message=process_message,
         process_ideas=process_ideas,
         process_blueprint=process_blueprint,
+        stream_message=stream_message,
     )

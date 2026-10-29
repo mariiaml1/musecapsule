@@ -171,14 +171,6 @@ def create_app(
                 detail="Session not found.",
             )
 
-        text = request.text.strip()
-
-        if not text:
-            raise HTTPException(
-                status_code=422,
-                detail="Message cannot be empty.",
-            )
-
         def save_result(updated: SessionState) -> None:
             store.save(
                 updated,
@@ -187,7 +179,7 @@ def create_app(
 
         events = stream_message(
             session,
-            text,
+            request.text,
             save_result,
         )
 

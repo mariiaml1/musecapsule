@@ -1,8 +1,11 @@
+import json
+import sqlite3
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
+from musecapsule.agent_events import stream_graph_run
 from musecapsule.api import create_app
 from musecapsule.models import (
     EvidenceRef,
@@ -21,6 +24,7 @@ from musecapsule.state import (
     append_product_ideas,
 )
 from musecapsule.storage import SessionStore
+from musecapsule.workflow import build_exploration_graph
 
 
 def test_api_creates_session_and_restores_it_after_reopening(tmp_path):
@@ -543,6 +547,7 @@ def test_api_appends_blueprint_versions_for_selected_idea(tmp_path):
         assert restored.status_code == 200
         assert restored.json() == second
 
+
 from musecapsule.agent_events import encode_sse
 
 
@@ -612,3 +617,371 @@ def test_api_streams_message_events_and_saves_session(tmp_path):
     restored = client.get(f"/sessions/{session_id}")
     assert restored.status_code == 200
     assert restored.json()["revision"] == 1
+
+
+def test_api_streams_real_graph_and_persists_only_final_state(tmp_path):
+    database_path = tmp_path / "sessions.db"
+    narrative = "  A golden note floats inside a capsule.\n"
+    generation_calls = []
+    saved_revisions = []
+
+    def generate_images(text):
+        generation_calls.append("images")
+        assert text == narrative
+
+        return json.dumps(
+            {
+                "images": [
+                    {
+                        "label": "Golden note",
+                        "quote": "A golden note",
+                    }
+                ]
+            }
+        )
+
+    def generate_hypotheses(context):
+        generation_calls.append("hypotheses")
+        payload = json.loads(context)
+        image = payload["images"][0]
+
+        return json.dumps(
+            {
+                "hypotheses": [
+                    {
+                        "statement": ("The note could represent one valuable result."),
+                        "image_ids": [image["id"]],
+                        "evidence": image["evidence"],
+                    }
+                ]
+            }
+        )
+
+    def generate_question(_):
+        generation_calls.append("question")
+        return json.dumps({"question": "What happens to the golden note?"})
+
+    def unexpected_generation(_):
+        pytest.fail("This workflow branch must not invoke generation.")
+
+    graph = build_exploration_graph(
+        generate_images=generate_images,
+        generate_hypotheses=generate_hypotheses,
+        generate_revisions=unexpected_generation,
+        generate_question=generate_question,
+        generate_ideas=unexpected_generation,
+        generate_architecture=unexpected_generation,
+    )
+
+    def stream_message(session, text, save_result):
+        def save_and_record(updated):
+            save_result(updated)
+            saved_revisions.append(updated.revision)
+
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "explore",
+                "incoming_message": Message(role="user", text=text),
+            },
+            save_and_record,
+        )
+
+    app = create_app(
+        database_path,
+        stream_message=stream_message,
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/sessions",
+            json={
+                "goal": "Build an AI portfolio project",
+                "constraints": ["Small MVP"],
+            },
+        ).json()
+
+        response = client.post(
+            f"/sessions/{created['id']}/messages/stream",
+            json={"text": narrative},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+
+        # Parse complete SSE frames rather than matching substrings.
+        events = []
+        for frame in response.text.strip().split("\n\n"):
+            event_line, data_line = frame.splitlines()
+            events.append(
+                (
+                    event_line.removeprefix("event: "),
+                    json.loads(data_line.removeprefix("data: ")),
+                )
+            )
+
+        assert events == [
+            ("node_completed", {"node": "explore_images"}),
+            ("node_completed", {"node": "explore_hypotheses"}),
+            ("node_completed", {"node": "ask_question"}),
+            (
+                "session_completed",
+                {
+                    "session_id": created["id"],
+                    "revision": 4,
+                },
+            ),
+        ]
+
+        restored_response = client.get(f"/sessions/{created['id']}")
+        assert restored_response.status_code == 200
+        restored = restored_response.json()
+
+    assert generation_calls == ["images", "hypotheses", "question"]
+    assert saved_revisions == [4]
+
+    assert restored["intent"] == created["intent"]
+    assert restored["revision"] == 4
+    assert restored["messages"][0]["text"] == narrative
+    assert restored["messages"][1]["text"] == ("What happens to the golden note?")
+    assert len(restored["images"]) == 1
+    assert len(restored["hypotheses"]) == 1
+
+    image = restored["images"][0]
+    hypothesis = restored["hypotheses"][0]
+    assert hypothesis["image_ids"] == [image["id"]]
+    assert image["evidence"][0]["message_id"] == (restored["messages"][0]["id"])
+
+    # Intermediate node states must not become database snapshots.
+    with sqlite3.connect(database_path) as connection:
+        revisions = connection.execute(
+            """
+            SELECT revision
+            FROM session_snapshots
+            WHERE session_id = ?
+            ORDER BY revision
+            """,
+            (created["id"],),
+        ).fetchall()
+
+    assert revisions == [(0,), (4,)]
+
+    # Recreating the API must restore the same persisted result.
+    with TestClient(create_app(database_path)) as client:
+        reopened = client.get(f"/sessions/{created['id']}")
+        assert reopened.status_code == 200
+        assert reopened.json() == restored
+
+
+def test_api_stream_failure_does_not_persist_partial_state(tmp_path):
+    database_path = tmp_path / "sessions.db"
+    save_calls = []
+
+    def generate_images(_):
+        return json.dumps(
+            {
+                "images": [
+                    {
+                        "label": "Golden note",
+                        "quote": "A golden note",
+                    }
+                ]
+            }
+        )
+
+    def failing_generation(_):
+        raise RuntimeError("Private provider details")
+
+    def unexpected_generation(_):
+        pytest.fail("Execution must stop after hypothesis generation fails.")
+
+    graph = build_exploration_graph(
+        generate_images=generate_images,
+        generate_hypotheses=failing_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=unexpected_generation,
+        generate_architecture=unexpected_generation,
+    )
+
+    def stream_message(session, text, save_result):
+        def save_and_record(updated):
+            save_calls.append(updated.revision)
+            save_result(updated)
+
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "explore",
+                "incoming_message": Message(role="user", text=text),
+            },
+            save_and_record,
+        )
+
+    app = create_app(
+        database_path,
+        stream_message=stream_message,
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/sessions",
+            json={
+                "goal": "Build an AI portfolio project",
+                "constraints": [],
+            },
+        ).json()
+
+        response = client.post(
+            f"/sessions/{created['id']}/messages/stream",
+            json={"text": "A golden note floats inside a capsule."},
+        )
+
+        assert response.status_code == 200
+        assert response.text == (
+            encode_sse(
+                "node_completed",
+                {"node": "explore_images"},
+            )
+            + encode_sse(
+                "run_failed",
+                {"message": "Agent execution failed."},
+            )
+        )
+        assert "Private provider details" not in response.text
+        assert save_calls == []
+
+        restored = client.get(f"/sessions/{created['id']}")
+        assert restored.status_code == 200
+        assert restored.json() == created
+
+    with sqlite3.connect(database_path) as connection:
+        revisions = connection.execute(
+            """
+            SELECT revision
+            FROM session_snapshots
+            WHERE session_id = ?
+            ORDER BY revision
+            """,
+            (created["id"],),
+        ).fetchall()
+
+    assert revisions == [(0,)]
+
+
+def test_api_stream_conflict_preserves_newer_session(tmp_path):
+    database_path = tmp_path / "sessions.db"
+    competing_store = SessionStore(database_path)
+    competing_states = []
+
+    def generate_images(_):
+        return json.dumps(
+            {
+                "images": [
+                    {
+                        "label": "Golden note",
+                        "quote": "A golden note",
+                    }
+                ]
+            }
+        )
+
+    def generate_hypotheses(_):
+        return '{"hypotheses": []}'
+
+    def generate_question(_):
+        # Simulate another request committing before this run finishes.
+        current = competing_store.load(session_id)
+        assert current is not None
+
+        newer = append_message(
+            current,
+            Message(
+                role="user",
+                text="A silver key appears beside the capsule.",
+            ),
+        )
+        competing_store.save(
+            newer,
+            expected_revision=current.revision,
+        )
+        competing_states.append(newer)
+
+        return json.dumps({"question": "What happens to the golden note?"})
+
+    def unexpected_generation(_):
+        pytest.fail("This workflow branch must not invoke generation.")
+
+    graph = build_exploration_graph(
+        generate_images=generate_images,
+        generate_hypotheses=generate_hypotheses,
+        generate_revisions=unexpected_generation,
+        generate_question=generate_question,
+        generate_ideas=unexpected_generation,
+        generate_architecture=unexpected_generation,
+    )
+
+    def stream_message(session, text, save_result):
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "explore",
+                "incoming_message": Message(role="user", text=text),
+            },
+            save_result,
+        )
+
+    app = create_app(
+        database_path,
+        stream_message=stream_message,
+    )
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/sessions",
+            json={
+                "goal": "Build an AI portfolio project",
+                "constraints": [],
+            },
+        ).json()
+        session_id = UUID(created["id"])
+
+        response = client.post(
+            f"/sessions/{session_id}/messages/stream",
+            json={"text": "A golden note floats inside a capsule."},
+        )
+
+        assert response.status_code == 200
+        assert response.text == (
+            encode_sse("node_completed", {"node": "explore_images"})
+            + encode_sse(
+                "node_completed",
+                {"node": "explore_hypotheses"},
+            )
+            + encode_sse("node_completed", {"node": "ask_question"})
+            + encode_sse(
+                "run_failed",
+                {"message": "Agent execution failed."},
+            )
+        )
+
+        assert len(competing_states) == 1
+        restored = client.get(f"/sessions/{session_id}")
+        assert restored.status_code == 200
+        assert restored.json() == competing_states[0].model_dump(mode="json")
+
+    with sqlite3.connect(database_path) as connection:
+        revisions = connection.execute(
+            """
+            SELECT revision
+            FROM session_snapshots
+            WHERE session_id = ?
+            ORDER BY revision
+            """,
+            (str(session_id),),
+        ).fetchall()
+
+    assert revisions == [(0,), (1,)]
