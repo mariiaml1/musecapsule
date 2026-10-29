@@ -1,3 +1,7 @@
+## Story
+
+[The Story Behind MuseCapsule AI](STORY.md)
+
 ## Demo
 
 [Watch or download the demo video](https://github.com/mariiaml1/musecapsule/releases/tag/v0.1.0)
