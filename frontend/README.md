@@ -16,6 +16,9 @@ MuseCapsule transforms spontaneous human metaphors into structured product ideas
 
 ## Features
 
+- Inspect the selected idea's source images and exact narrative quotes
+- Review linked AI hypotheses and their current statuses
+- Read the complete engineering blueprint, including constraints and risks
 - Create a session with a goal and constraints
 - Restore an existing session by ID
 - Explore metaphors through an interactive dialogue

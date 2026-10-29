@@ -11,7 +11,7 @@ import type { AgentRunStatus, NodeLifecycleEvent } from "./agent-events";
 import type { Session } from "./types";
 import "./App.css";
 import { AgentFlow } from "./AgentFlow";
-
+import { IdeaOrigin } from "./IdeaOrigin";
 
 const nodeLabels: Record<string, { agent: string; step: string }> = {
   explore_images: {
@@ -536,7 +536,9 @@ export default function App() {
                         ) : null;
                       })}
                     </div>
-
+                    {selected && (
+                      <IdeaOrigin idea={idea} session={session} />
+                    )}
                     <button
                       className={selected ? "secondary" : ""}
                       disabled={loading || selected}
@@ -563,8 +565,19 @@ export default function App() {
 
                   {selectedBrief && (
                     <div className="blueprint-content">
+                      <p className="muted">
+                        AI-proposed implementation plan. Technical choices and assumptions
+                        require review before implementation.
+                      </p>
+
                       <h3>{selectedIdea.title}</h3>
                       <p>{selectedBrief.idea_summary}</p>
+
+                      <h4>Problem</h4>
+                      <p>{selectedBrief.problem}</p>
+
+                      <h4>Intended Audience</h4>
+                      <p>{selectedBrief.audience}</p>
 
                       <h4>Metaphor Origin</h4>
                       <p>{selectedBrief.metaphor_origin.meaning_basis}</p>
@@ -598,7 +611,23 @@ export default function App() {
                       ) : (
                         <p className="muted">No additional components proposed.</p>
                       )}
+                      <h4>User Constraints</h4>
+                      {selectedBrief.constraints.length > 0 ? (
+                        <ul>
+                          {selectedBrief.constraints.map((constraint, index) => (
+                            <li key={index}>{constraint}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="muted">No explicit constraints were provided.</p>
+                      )}
 
+                      <h4>Risks</h4>
+                      <ul>
+                        {selectedBrief.risks.map((risk, index) => (
+                          <li key={index}>{risk}</li>
+                        ))}
+                      </ul>
                       <h4>Definition of Done</h4>
                       <ul>
                         {selectedBrief.acceptance_criteria.map((criterion, index) => (

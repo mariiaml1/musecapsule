@@ -27,6 +27,7 @@ export interface Session extends SessionOverview {
 export interface ImageFragment {
     id: string;
     label: string;
+    evidence: EvidenceRef[];
 }
 
 export interface Hypothesis {
@@ -34,6 +35,7 @@ export interface Hypothesis {
     statement: string;
     status: "proposed" | "supported" | "unsupported" | "superseded";
     image_ids: string[];
+    evidence: EvidenceRef[];
 }
 
 export interface ProductIdea {
@@ -71,4 +73,10 @@ export interface MVPBrief {
     risks: string[];
     acceptance_criteria: string[];
     suggested_architecture: ArchitectureComponent[];
+}
+
+/** An exact narrative quote linked to its original message. */
+export interface EvidenceRef {
+    message_id: string;
+    quote: string;
 }

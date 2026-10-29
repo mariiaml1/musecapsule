@@ -275,3 +275,25 @@ button.secondary {
   margin: 8px 0;
   font-size: 13px;
 }
+
+.idea-origin {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #49445f;
+  border-radius: 12px;
+}
+
+.origin-quote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.idea-origin blockquote {
+  margin: 0.75rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #bc9cff;
+}
+
+.idea-origin summary {
+  cursor: pointer;
+}
