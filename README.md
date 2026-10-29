@@ -16,6 +16,47 @@ blueprints, guided by an explicit user goal and constraints.
 AI interpretations are proposals, not established user facts or
 automatically confirmed meanings.
 
+## Walkthrough
+
+### Explore an imagined scene
+
+The dialogue preserves the user's goal while extracting source images
+and proposing revisable interpretations.
+
+![Narrative exploration and grounded hypotheses](docs/images/imagination.png)
+
+### Develop a traceable idea
+
+Product ideas connect proposed mechanics to narrative images and
+meaning hypotheses.
+
+![Selected idea and metaphor provenance](docs/images/ideas.png)
+
+### Shape an engineering blueprint
+
+The selected idea becomes a bounded implementation proposal with
+features, constraints, risks and acceptance criteria.
+
+![Engineering blueprint for the selected idea](docs/images/blueprint.png)
+
+These screenshots show one saved example. Generated results vary.
+See [the demo walkthrough](docs/DEMO.md) for the scenario.
+
+### Observe real workflow execution
+
+Backend SSE events show completed steps and the currently running node.
+This example shows hypothesis revision followed by question generation.
+Idea and blueprint generation are separate user-triggered commands.
+
+![LangGraph workflow during execution](docs/images/agent-activity.png)
+
+### Revisit interpretations after clarification
+
+AI-proposed interpretations after a clarification, including an inactive
+hypothesis and a temporal-reasoning interpretation.
+
+![Hypothesis statuses after clarification](docs/images/hypothesis-revision.png)
+
 ## Requirements
 
 - Python 3.13
