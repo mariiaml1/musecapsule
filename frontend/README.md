@@ -48,7 +48,7 @@ The backend runs at `http://127.0.0.1:8000`.
 From the `frontend` directory:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -119,7 +119,6 @@ live backend smoke test remain separate checks.
 - The interface is intended for local development.
 - Generated meanings are AI proposals, not automatically confirmed user interpretations.
 - External research is not required to generate ideas or blueprints.
-- The diagram currently covers narrative exploration only.
 - Diagram topology is maintained in the frontend to match the backend workflow.
 - Observed transitions are derived from sequential node events;
   parallel execution is not supported by this visualization.
