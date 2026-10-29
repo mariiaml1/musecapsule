@@ -31,6 +31,11 @@ const layout = [
         label: "Imagination Guide\nAsk a question",
         position: { x: 180, y: 320 },
     },
+    {
+        id: "create_ideas",
+        label: "Idea Evolution\nGenerate product ideas",
+        position: { x: 180, y: 490 },
+    },
 ];
 
 const edges: Edge[] = [

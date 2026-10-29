@@ -132,22 +132,25 @@ export async function buildBlueprint(
     return readResponse<Session>(response);
 }
 
-/** Stream one exploration request without automatically retrying it. */
-export async function streamMessage(
+/** Execute one session command and consume its SSE response. */
+async function streamSessionRequest(
     sessionId: string,
-    text: string,
+    action: "messages" | "ideas",
+    body: { text: string } | undefined,
     onNodeEvent: (event: NodeLifecycleEvent) => void,
     signal?: AbortSignal,
 ): Promise<SessionCompletedEvent | RunFailedEvent> {
     const response = await fetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}/messages/stream`,
+        `/api/sessions/${encodeURIComponent(sessionId)}/${action}/stream`,
         {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
+                ...(body === undefined
+                    ? {}
+                    : { "Content-Type": "application/json" }),
                 Accept: "text/event-stream",
             },
-            body: JSON.stringify({ text }),
+            body: body === undefined ? undefined : JSON.stringify(body),
             signal,
         },
     );
@@ -213,4 +216,35 @@ export async function streamMessage(
         }
         reader.releaseLock();
     }
+}
+
+/** Explore one narrative message through the streaming endpoint. */
+export function streamMessage(
+    sessionId: string,
+    text: string,
+    onNodeEvent: (event: NodeLifecycleEvent) => void,
+    signal?: AbortSignal,
+): Promise<SessionCompletedEvent | RunFailedEvent> {
+    return streamSessionRequest(
+        sessionId,
+        "messages",
+        { text },
+        onNodeEvent,
+        signal,
+    );
+}
+
+/** Generate ideas from the saved session without adding a message. */
+export function streamIdeas(
+    sessionId: string,
+    onNodeEvent: (event: NodeLifecycleEvent) => void,
+    signal?: AbortSignal,
+): Promise<SessionCompletedEvent | RunFailedEvent> {
+    return streamSessionRequest(
+        sessionId,
+        "ideas",
+        undefined,
+        onNodeEvent,
+        signal,
+    );
 }

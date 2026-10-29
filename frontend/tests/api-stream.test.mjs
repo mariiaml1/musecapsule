@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { streamMessage } from "../src/api.ts";
+import { streamIdeas, streamMessage } from "../src/api.ts";
 
 /** Build a response whose UTF-8 bytes arrive individually. */
 function createStreamResponse (text) {
@@ -135,4 +135,49 @@ test("rejects completion for a different session", async (t) => {
         streamMessage("session-1", "A note.", () => { }),
         /Agent stream returned a different session/,
     );
+});
+
+test("streams ideas without sending a narrative body", async (t) => {
+    const received = [];
+
+    const fetchMock = t.mock.method(
+        globalThis,
+        "fetch",
+        async (url, options) => {
+            assert.equal(url, "/api/sessions/session-1/ideas/stream");
+            assert.equal(options.method, "POST");
+            assert.equal(options.body, undefined);
+            assert.equal(options.headers.Accept, "text/event-stream");
+
+            return createStreamResponse(
+                'event: node_started\n' +
+                'data: {"node":"create_ideas"}\n\n' +
+                'event: node_completed\n' +
+                'data: {"node":"create_ideas"}\n\n' +
+                'event: session_completed\n' +
+                'data: {"session_id":"session-1","revision":5}\n\n',
+            );
+        },
+    );
+
+    const result = await streamIdeas(
+        "session-1",
+        (event) => received.push(event),
+    );
+
+    assert.equal(fetchMock.mock.callCount(), 1);
+    assert.deepEqual(received, [
+        {
+            event: "node_started",
+            data: { node: "create_ideas" },
+        },
+        {
+            event: "node_completed",
+            data: { node: "create_ideas" },
+        },
+    ]);
+    assert.deepEqual(result, {
+        event: "session_completed",
+        data: { session_id: "session-1", revision: 5 },
+    });
 });

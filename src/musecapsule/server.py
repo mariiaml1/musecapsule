@@ -106,10 +106,25 @@ def create_local_app() -> FastAPI:
             save_result,
         )
 
+    def stream_ideas(
+        session: SessionState,
+        save_result: Callable[[SessionState], None],
+    ) -> Iterator[str]:
+        """Stream idea generation through the existing compiled graph."""
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "generate_ideas",
+            },
+            save_result,
+        )
+
     return create_app(
         database_path,
         process_message=process_message,
         process_ideas=process_ideas,
         process_blueprint=process_blueprint,
         stream_message=stream_message,
+        stream_ideas=stream_ideas,
     )

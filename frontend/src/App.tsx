@@ -3,14 +3,15 @@ import {
   createSession,
   loadSession,
   streamMessage,
-  generateIdeas,
   selectIdea,
   buildBlueprint,
+  streamIdeas,
 } from "./api";
-import type { AgentRunStatus } from "./agent-events";
+import type { AgentRunStatus, NodeLifecycleEvent } from "./agent-events";
 import type { Session } from "./types";
 import "./App.css";
 import { AgentFlow } from "./AgentFlow";
+
 
 const nodeLabels: Record<string, { agent: string; step: string }> = {
   explore_images: {
@@ -55,6 +56,18 @@ export default function App() {
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
   const [activeNode, setActiveNode] = useState<string | null>(null);
 
+  function handleNodeEvent(event: NodeLifecycleEvent) {
+    if (event.event === "node_started") {
+      setActiveNode(event.data.node);
+      return;
+    }
+
+    setCompletedNodes((nodes) => [...nodes, event.data.node]);
+    setActiveNode((current) =>
+      current === event.data.node ? null : current,
+    );
+  }
+
   async function run(operation: () => Promise<Session>) {
     setLoading(true);
     setError("");
@@ -78,14 +91,58 @@ export default function App() {
   async function handleGenerateIdeas() {
     if (!session || loading || session.images.length === 0) return;
 
+    const currentSessionId = session.id;
+
     setLoading(true);
     setError("");
+    setCompletedNodes([]);
+    setActiveNode(null);
+    setAgentRunStatus("running");
 
     try {
-      const updated = await generateIdeas(session.id);
-      setSession(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Idea generation failed.");
+      let result;
+
+      try {
+        result = await streamIdeas(
+          currentSessionId,
+          handleNodeEvent,
+        );
+      } catch (err) {
+        setAgentRunStatus("interrupted");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Idea stream interrupted. Reopen the session.",
+        );
+        return;
+      }
+
+      if (result.event === "run_failed") {
+        setAgentRunStatus("failed");
+        setError(result.data.message);
+
+        if (result.data.code === "session_conflict") {
+          try {
+            setSession(await loadSession(currentSessionId));
+          } catch {
+            setError(
+              "Session changed, but reloading failed. Open the session again.",
+            );
+          }
+        }
+
+        return;
+      }
+
+      setAgentRunStatus("completed");
+
+      try {
+        setSession(await loadSession(currentSessionId));
+      } catch {
+        setError(
+          "Ideas were saved, but reloading failed. Open the session again.",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -126,17 +183,7 @@ export default function App() {
         result = await streamMessage(
           currentSessionId,
           text,
-          (event) => {
-            if (event.event === "node_started") {
-              setActiveNode(event.data.node);
-              return;
-            }
-
-            setCompletedNodes((nodes) => [...nodes, event.data.node]);
-            setActiveNode((current) =>
-              current === event.data.node ? null : current,
-            );
-          },
+          handleNodeEvent,
         );
       } catch (err) {
         // Without a terminal event, persistence remains unconfirmed.
@@ -344,14 +391,14 @@ export default function App() {
         <section className="panel flow-panel">
           <h2>Agent Flow</h2>
           <p className="muted">
-            Live execution stages from the latest exploration request.
+            Live execution stages from the latest workflow request.
           </p>
 
           <p role="status" aria-live="polite">
-            {agentRunStatus === "idle" && "Waiting for an exploration."}
-            {agentRunStatus === "running" && "Exploration in progress…"}
-            {agentRunStatus === "completed" && "Exploration saved."}
-            {agentRunStatus === "failed" && "Exploration failed."}
+            {agentRunStatus === "idle" && "Waiting for a workflow request."}
+            {agentRunStatus === "running" && "Workflow in progress…"}
+            {agentRunStatus === "completed" && "Workflow result saved."}
+            {agentRunStatus === "failed" && "Workflow failed."}
             {agentRunStatus === "interrupted" &&
               "Result unconfirmed. Reopen the session before retrying."}
           </p>

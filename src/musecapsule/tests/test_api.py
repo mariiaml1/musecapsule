@@ -1011,3 +1011,185 @@ def test_api_stream_conflict_preserves_newer_session(tmp_path):
         ).fetchall()
 
     assert revisions == [(0,), (1,)]
+
+
+def test_api_streams_ideas_and_persists_final_batch(tmp_path):
+    database_path = tmp_path / "sessions.db"
+    message = Message(
+        role="user",
+        text="A golden note floats inside a capsule.",
+    )
+    evidence = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[evidence],
+    )
+    hypothesis = Hypothesis(
+        statement="The note could represent one valuable result.",
+        image_ids=[image.id],
+        evidence=[evidence],
+    )
+    session = SessionState(
+        intent=Intent(
+            goal="Build an AI portfolio project",
+            constraints=["Small MVP"],
+        ),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+    )
+    SessionStore(database_path).save(session)
+
+    generation_calls = []
+    saved_revisions = []
+
+    def generate_ideas(context):
+        generation_calls.append(json.loads(context))
+
+        return json.dumps(
+            {
+                "ideas": [
+                    {
+                        "title": title,
+                        "description": description,
+                        "goal_alignment": "A bounded AI portfolio project.",
+                        "image_ids": [str(image.id)],
+                        "hypothesis_ids": [str(hypothesis.id)],
+                        "new_hypotheses": [],
+                    }
+                    for title, description in [
+                        (
+                            "Experiment Capsule",
+                            "Save and inspect one AI experiment result.",
+                        ),
+                        (
+                            "Result Selector",
+                            "Compare AI outputs and select one to develop.",
+                        ),
+                    ]
+                ]
+            }
+        )
+
+    def unexpected_generation(_):
+        pytest.fail("Idea generation must not invoke other generators.")
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=generate_ideas,
+        generate_architecture=unexpected_generation,
+    )
+
+    def stream_ideas(current, save_result):
+        def save_and_record(updated):
+            save_result(updated)
+            saved_revisions.append(updated.revision)
+
+        return stream_graph_run(
+            graph,
+            {
+                "session": current,
+                "command": "generate_ideas",
+            },
+            save_and_record,
+        )
+
+    app = create_app(
+        database_path,
+        stream_ideas=stream_ideas,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/sessions/{session.id}/ideas/stream",
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.text == (
+            encode_sse("node_started", {"node": "create_ideas"})
+            + encode_sse("node_completed", {"node": "create_ideas"})
+            + encode_sse(
+                "session_completed",
+                {
+                    "session_id": str(session.id),
+                    "revision": 1,
+                },
+            )
+        )
+
+    assert len(generation_calls) == 1
+    assert saved_revisions == [1]
+
+    # Recreate the API to verify that the result was persisted.
+    with TestClient(create_app(database_path)) as client:
+        response = client.get(f"/sessions/{session.id}")
+        assert response.status_code == 200
+        restored = SessionState.model_validate(response.json())
+
+    assert restored.intent == session.intent
+    assert restored.messages == session.messages
+    assert restored.images == session.images
+    assert restored.hypotheses == session.hypotheses
+    assert restored.revision == 1
+    assert len(restored.ideas) == 2
+    assert restored.ideas[0].id != restored.ideas[1].id
+
+    for idea in restored.ideas:
+        assert idea.image_ids == [image.id]
+        assert idea.hypothesis_ids == [hypothesis.id]
+
+    with sqlite3.connect(database_path) as connection:
+        revisions = connection.execute(
+            """
+            SELECT revision
+            FROM session_snapshots
+            WHERE session_id = ?
+            ORDER BY revision
+            """,
+            (str(session.id),),
+        ).fetchall()
+
+    assert revisions == [(0,), (1,)]
+
+
+def test_api_rejects_idea_stream_without_images(tmp_path):
+    database_path = tmp_path / "sessions.db"
+
+    def unexpected_stream(session, save_result):
+        pytest.fail("Streaming must not start without narrative images.")
+
+    app = create_app(
+        database_path,
+        stream_ideas=unexpected_stream,
+    )
+
+    with TestClient(app) as client:
+        created_response = client.post(
+            "/sessions",
+            json={
+                "goal": "Build an AI portfolio project",
+                "constraints": ["Small MVP"],
+            },
+        )
+        assert created_response.status_code == 201
+        created = created_response.json()
+
+        response = client.post(
+            f"/sessions/{created['id']}/ideas/stream",
+        )
+
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": "Explore at least one image before requesting ideas.",
+        }
+
+        restored = client.get(f"/sessions/{created['id']}")
+        assert restored.status_code == 200
+        assert restored.json() == created

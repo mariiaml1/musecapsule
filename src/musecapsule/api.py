@@ -38,6 +38,11 @@ MessageStreamHandler = Callable[
     Iterator[str],
 ]
 
+SessionStreamHandler = Callable[
+    [SessionState, Callable[[SessionState], None]],
+    Iterator[str],
+]
+
 
 def create_app(
     database_path: Path = Path("data/musecapsule.db"),
@@ -46,6 +51,7 @@ def create_app(
     process_ideas: Callable[[SessionState], SessionState] | None = None,
     process_blueprint: Callable[[SessionState], SessionState] | None = None,
     stream_message: MessageStreamHandler | None = None,
+    stream_ideas: SessionStreamHandler | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -219,6 +225,45 @@ def create_app(
             )
 
         return process_and_save(session, process_ideas)
+
+    @app.post("/sessions/{session_id}/ideas/stream")
+    def stream_session_ideas(session_id: UUID) -> StreamingResponse:
+        """Stream idea generation and persist its final session."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        if not session.images:
+            raise HTTPException(
+                status_code=409,
+                detail="Explore at least one image before requesting ideas.",
+            )
+
+        handler = stream_ideas
+        if handler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Idea streaming is not configured.",
+            )
+
+        def save_result(updated: SessionState) -> None:
+            store.save(
+                updated,
+                expected_revision=session.revision,
+            )
+
+        return StreamingResponse(
+            handler(session, save_result),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.post(
         "/sessions/{session_id}/selection",
