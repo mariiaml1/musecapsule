@@ -542,3 +542,73 @@ def test_api_appends_blueprint_versions_for_selected_idea(tmp_path):
 
         assert restored.status_code == 200
         assert restored.json() == second
+
+from musecapsule.agent_events import encode_sse
+
+
+def test_api_streams_message_events_and_saves_session(tmp_path):
+    database_path = tmp_path / "sessions.db"
+
+    calls = []
+
+    def fake_stream_message(session, text, save_result):
+        calls.append("start")
+
+        assert text == "A golden note floats inside a capsule."
+
+        yield encode_sse(
+            "node_completed",
+            {"node": "metaphor_explorer"},
+        )
+
+        updated = session.model_copy(
+            update={"revision": session.revision + 1},
+        )
+
+        save_result(updated)
+        calls.append("save")
+
+        yield encode_sse(
+            "session_completed",
+            {
+                "session_id": str(updated.id),
+                "revision": updated.revision,
+            },
+        )
+
+    app = create_app(
+        database_path=database_path,
+        stream_message=fake_stream_message,
+    )
+    client = TestClient(app)
+
+    created = client.post(
+        "/sessions",
+        json={
+            "goal": "Build an AI portfolio project",
+            "constraints": ["Solo development"],
+        },
+    )
+
+    assert created.status_code == 201
+    session_id = created.json()["id"]
+
+    response = client.post(
+        f"/sessions/{session_id}/messages/stream",
+        json={
+            "text": "A golden note floats inside a capsule.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    assert "event: node_completed" in response.text
+    assert '"node": "metaphor_explorer"' in response.text
+    assert "event: session_completed" in response.text
+
+    assert calls == ["start", "save"]
+
+    restored = client.get(f"/sessions/{session_id}")
+    assert restored.status_code == 200
+    assert restored.json()["revision"] == 1

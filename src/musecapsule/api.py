@@ -1,8 +1,9 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from musecapsule.models import Intent, Message
@@ -32,6 +33,11 @@ class SelectIdeaRequest(BaseModel):
 
     idea_id: UUID
 
+MessageStreamHandler = Callable[
+    [SessionState, str, Callable[[SessionState], None]],
+    Iterator[str],
+]
+
 
 def create_app(
     database_path: Path = Path("data/musecapsule.db"),
@@ -39,6 +45,7 @@ def create_app(
     process_message: Callable[[SessionState, Message], SessionState] | None = None,
     process_ideas: Callable[[SessionState], SessionState] | None = None,
     process_blueprint: Callable[[SessionState], SessionState] | None = None,
+    stream_message: MessageStreamHandler | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -143,6 +150,55 @@ def create_app(
             return handler(current, message)
 
         return process_and_save(session, operation)
+
+    @app.post("/sessions/{session_id}/messages/stream")
+    def stream_session_message(
+        session_id: UUID,
+        request: CreateMessageRequest,
+    ):
+        """Stream narrative exploration events over SSE."""
+        if stream_message is None:
+            raise HTTPException(
+                status_code=501,
+                detail="Agent streaming is not configured.",
+            )
+
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        text = request.text.strip()
+
+        if not text:
+            raise HTTPException(
+                status_code=422,
+                detail="Message cannot be empty.",
+            )
+
+        def save_result(updated: SessionState) -> None:
+            store.save(
+                updated,
+                expected_revision=session.revision,
+            )
+
+        events = stream_message(
+            session,
+            text,
+            save_result,
+        )
+
+        return StreamingResponse(
+            events,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.post(
         "/sessions/{session_id}/ideas",
