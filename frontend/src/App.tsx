@@ -52,6 +52,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [agentRunStatus, setAgentRunStatus] = useState<AgentRunStatus>("idle");
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
+  const [activeNode, setActiveNode] = useState<string | null>(null);
 
   async function run(operation: () => Promise<Session>) {
     setLoading(true);
@@ -63,6 +64,9 @@ export default function App() {
       setCompletedNodes([]);
       setAgentRunStatus("idle");
       setSessionId(result.id);
+      setCompletedNodes([]);
+      setActiveNode(null);
+      setAgentRunStatus("idle");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
     } finally {
@@ -110,6 +114,7 @@ export default function App() {
 
     setLoading(true);
     setError("");
+    setActiveNode(null);
     setCompletedNodes([]);
     setAgentRunStatus("running");
 
@@ -121,7 +126,15 @@ export default function App() {
           currentSessionId,
           text,
           (event) => {
+            if (event.event === "node_started") {
+              setActiveNode(event.data.node);
+              return;
+            }
+
             setCompletedNodes((nodes) => [...nodes, event.data.node]);
+            setActiveNode((current) =>
+              current === event.data.node ? null : current,
+            );
           },
         );
       } catch (err) {
@@ -330,7 +343,7 @@ export default function App() {
         <section className="panel flow-panel">
           <h2>Agent Flow</h2>
           <p className="muted">
-            Actual node completions from the latest exploration request.
+            Live execution stages from the latest exploration request.
           </p>
 
           <p role="status" aria-live="polite">
@@ -352,12 +365,32 @@ export default function App() {
                   <div>
                     <strong>{label?.agent ?? node}</strong>
                     <p className="muted">
-                      {label?.step ?? node} — completed
+                      {label?.step ?? node} — Completed
                     </p>
                   </div>
                 </div>
               );
             })}
+
+            {activeNode && (
+              <div className="agent-step">
+                <span className="agent-number">
+                  {completedNodes.length + 1}
+                </span>
+                <div>
+                  <strong>
+                    {nodeLabels[activeNode]?.agent ?? activeNode}
+                  </strong>
+                  <p className="muted">
+                    {nodeLabels[activeNode]?.step ?? activeNode}
+                    {" — "}
+                    {agentRunStatus === "running"
+                      ? "Running…"
+                      : "Completion unconfirmed"}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <p className="flow-note">

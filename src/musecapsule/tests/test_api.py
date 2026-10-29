@@ -719,8 +719,11 @@ def test_api_streams_real_graph_and_persists_only_final_state(tmp_path):
             )
 
         assert events == [
+            ("node_started", {"node": "explore_images"}),
             ("node_completed", {"node": "explore_images"}),
+            ("node_started", {"node": "explore_hypotheses"}),
             ("node_completed", {"node": "explore_hypotheses"}),
+            ("node_started", {"node": "ask_question"}),
             ("node_completed", {"node": "ask_question"}),
             (
                 "session_completed",
@@ -838,10 +841,9 @@ def test_api_stream_failure_does_not_persist_partial_state(tmp_path):
 
         assert response.status_code == 200
         assert response.text == (
-            encode_sse(
-                "node_completed",
-                {"node": "explore_images"},
-            )
+            encode_sse("node_started", {"node": "explore_images"})
+            + encode_sse("node_completed", {"node": "explore_images"})
+            + encode_sse("node_started", {"node": "explore_hypotheses"})
             + encode_sse(
                 "run_failed",
                 {
@@ -956,12 +958,30 @@ def test_api_stream_conflict_preserves_newer_session(tmp_path):
 
         assert response.status_code == 200
         assert response.text == (
-            encode_sse("node_completed", {"node": "explore_images"})
+            encode_sse(
+                "node_started",
+                {"node": "explore_images"},
+            )
+            + encode_sse(
+                "node_completed",
+                {"node": "explore_images"},
+            )
+            + encode_sse(
+                "node_started",
+                {"node": "explore_hypotheses"},
+            )
             + encode_sse(
                 "node_completed",
                 {"node": "explore_hypotheses"},
             )
-            + encode_sse("node_completed", {"node": "ask_question"})
+            + encode_sse(
+                "node_started",
+                {"node": "ask_question"},
+            )
+            + encode_sse(
+                "node_completed",
+                {"node": "ask_question"},
+            )
             + encode_sse(
                 "run_failed",
                 {

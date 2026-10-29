@@ -1,10 +1,10 @@
 import type { Intent, Session } from "./types";
 import { AgentEventBuffer } from "./agent-events.ts";
 import type {
-    NodeCompletedEvent,
+    NodeLifecycleEvent,
     RunFailedEvent,
     SessionCompletedEvent,
-} from "./agent-events";
+} from "./agent-events.ts";
 
 export class ApiError extends Error {
     public readonly status: number;
@@ -136,7 +136,7 @@ export async function buildBlueprint(
 export async function streamMessage(
     sessionId: string,
     text: string,
-    onNodeCompleted: (event: NodeCompletedEvent) => void,
+    onNodeEvent: (event: NodeLifecycleEvent) => void,
     signal?: AbortSignal,
 ): Promise<SessionCompletedEvent | RunFailedEvent> {
     const response = await fetch(
@@ -187,8 +187,11 @@ export async function streamMessage(
             const events = buffer.push(value);
 
             for (const event of events) {
-                if (event.event === "node_completed") {
-                    onNodeCompleted(event);
+                if (
+                    event.event === "node_started" ||
+                    event.event === "node_completed"
+                ) {
+                    onNodeEvent(event);
                     continue;
                 }
 

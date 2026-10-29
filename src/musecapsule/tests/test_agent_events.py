@@ -1,5 +1,3 @@
-import json
-
 from musecapsule.agent_events import (
     collect_agent_events,
     encode_sse,
@@ -60,10 +58,14 @@ def test_stream_graph_run_saves_once_after_execution():
         def stream(self, graph_input, *, stream_mode):
             graph_calls.append("stream")
             assert graph_input["session"] is session
-            assert stream_mode == "updates"
+            assert stream_mode == ["custom", "updates"]
 
-            yield {"metaphor_explorer": {"session": updated}}
-            yield {"imagination_guide": {"session": updated}}
+            yield "updates", {
+                "metaphor_explorer": {"session": updated},
+            }
+            yield "updates", {
+                "imagination_guide": {"session": updated},
+            }
 
     def save_result(result):
         graph_calls.append("save")
@@ -104,7 +106,11 @@ def test_stream_graph_run_does_not_report_success_when_save_fails():
 
     class FakeGraph:
         def stream(self, graph_input, *, stream_mode):
-            yield {"metaphor_explorer": {"session": session}}
+            assert stream_mode == ["custom", "updates"]
+
+            yield "updates", {
+                "metaphor_explorer": {"session": session},
+            }
 
     def failing_save(_):
         raise RuntimeError("Database unavailable")

@@ -161,3 +161,14 @@ test("rejects a truncated final event", () => {
         /Agent stream ended with an incomplete event/,
     );
 });
+
+test("parses a node start event", () => {
+    const result = parseAgentEvent(
+        'event: node_started\ndata: {"node":"explore_images"}',
+    );
+
+    assert.deepEqual(result, {
+        event: "node_started",
+        data: { node: "explore_images" },
+    });
+});

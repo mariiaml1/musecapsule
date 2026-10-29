@@ -33,15 +33,33 @@ def stream_graph_run(
     graph_input: dict,
     save_result: Callable[[SessionState], None],
 ) -> Iterator[str]:
-    """Stream graph progress and persist the final session once."""
+    """Stream node lifecycle events and persist the final session once."""
+
     latest_session: SessionState = graph_input["session"]
 
     try:
-        for update in graph.stream(
+        for mode, payload in graph.stream(
             graph_input,
-            stream_mode="updates",
+            stream_mode=["custom", "updates"],
         ):
-            for node_name, node_output in update.items():
+            if mode == "custom":
+                # Forward only the explicitly supported public event.
+                if (
+                    isinstance(payload, dict)
+                    and payload.get("event") == "node_started"
+                    and isinstance(payload.get("node"), str)
+                    and payload["node"].strip()
+                ):
+                    yield encode_sse(
+                        "node_started",
+                        {"node": payload["node"]},
+                    )
+                continue
+
+            if mode != "updates":
+                continue
+
+            for node_name, node_output in payload.items():
                 if isinstance(node_output, dict) and isinstance(
                     node_output.get("session"),
                     SessionState,

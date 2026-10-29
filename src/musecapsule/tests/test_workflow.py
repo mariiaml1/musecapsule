@@ -2,6 +2,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from langgraph.graph import END, START, StateGraph
 
 from musecapsule.models import (
     EvidenceRef,
@@ -13,7 +14,11 @@ from musecapsule.models import (
 )
 from musecapsule.state import SessionState
 from musecapsule.storage import SessionStore
-from musecapsule.workflow import build_exploration_graph
+from musecapsule.workflow import (
+    ExplorationState,
+    build_exploration_graph,
+    with_start_event,
+)
 
 
 def test_initial_exploration_graph_preserves_sources_and_orders_steps():
@@ -774,3 +779,76 @@ def test_workflow_preserves_combined_origin_from_idea_to_blueprint():
     assert completed.messages == session.messages
     assert completed.revision == session.revision + 4
     assert session.model_dump() == before
+
+
+def test_node_emits_start_event_before_operation(monkeypatch):
+    session = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+    )
+    observed = []
+
+    def writer(event):
+        observed.append(("event", event))
+
+    monkeypatch.setattr(
+        "musecapsule.workflow.get_stream_writer",
+        lambda: writer,
+    )
+
+    def operation(state: ExplorationState) -> dict:
+        observed.append(("operation", state["session"].id))
+        return {"session": state["session"]}
+
+    wrapped = with_start_event("explore_images", operation)
+    result = wrapped({"session": session})
+
+    assert observed == [
+        (
+            "event",
+            {
+                "event": "node_started",
+                "node": "explore_images",
+            },
+        ),
+        ("operation", session.id),
+    ]
+    assert result == {"session": session}
+
+
+def test_graph_streams_node_start_and_completion():
+    session = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+    )
+
+    def operation(state: ExplorationState) -> dict:
+        return {"session": state["session"]}
+
+    builder = StateGraph(ExplorationState)
+    builder.add_node(
+        "example_node",
+        with_start_event("example_node", operation),
+    )
+    builder.add_edge(START, "example_node")
+    builder.add_edge("example_node", END)
+    graph = builder.compile()
+
+    events = list(
+        graph.stream(
+            {"session": session},
+            stream_mode=["custom", "updates"],
+        )
+    )
+
+    assert events == [
+        (
+            "custom",
+            {
+                "event": "node_started",
+                "node": "example_node",
+            },
+        ),
+        (
+            "updates",
+            {"example_node": {"session": session}},
+        ),
+    ]

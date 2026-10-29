@@ -25,7 +25,7 @@ export interface RunFailedEvent {
 }
 
 export type AgentEvent =
-  | NodeCompletedEvent
+  | NodeLifecycleEvent
   | SessionCompletedEvent
   | RunFailedEvent;
 
@@ -75,6 +75,15 @@ export function parseAgentEvent(frame: string): AgentEvent | null {
   }
 
   switch (eventName) {
+    case "node_started":
+      if (!isNonblankString(data.node)) {
+        throw new Error("Invalid node start event.");
+      }
+
+      return {
+        event: "node_started",
+        data: { node: data.node },
+      };
     case "node_completed":
       if (!isNonblankString(data.node)) {
         throw new Error("Invalid node completion event.");
@@ -158,3 +167,15 @@ export class AgentEventBuffer {
     this.pending = "";
   }
 }
+
+/** A graph node has begun executing. */
+export interface NodeStartedEvent {
+  event: "node_started";
+  data: {
+    node: string;
+  };
+}
+
+export type NodeLifecycleEvent =
+  | NodeStartedEvent
+  | NodeCompletedEvent;

@@ -69,7 +69,10 @@ and operation. Session persistence is confirmed separately.
 
 ## Current Limitations
 - Live events currently cover narrative exploration only.
-- Node start events and per-node running statuses are not yet available.
+- Agent Flow displays real node start and completion events during exploration.
+- The current workflow executes nodes sequentially.
+- If a stream is interrupted, the last active node remains unconfirmed.
+- Execution events are not persisted as run history.
 - Execution events are shown for the current browser interaction and are
   not persisted as run history.
 - Idea generation and blueprint creation still use regular JSON endpoints.

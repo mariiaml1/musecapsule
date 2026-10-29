@@ -36,6 +36,8 @@ test("streams node events and returns persisted completion", async (t) => {
         });
 
         return createStreamResponse(
+            'event: node_started\n' +
+            'data: {"node":"explore_images"}\n\n' +
             'event: node_completed\n' +
             'data: {"node":"explore_images"}\n\n' +
             'event: node_completed\n' +
@@ -53,6 +55,10 @@ test("streams node events and returns persisted completion", async (t) => {
 
     assert.equal(fetchMock.mock.callCount(), 1);
     assert.deepEqual(received, [
+        {
+            event: "node_started",
+            data: { node: "explore_images" },
+        },
         {
             event: "node_completed",
             data: { node: "explore_images" },

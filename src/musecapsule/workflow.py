@@ -23,6 +23,7 @@ from musecapsule.state import (
     revise_hypothesis_status,
     select_product_idea,
 )
+from langgraph.config import get_stream_writer
 
 class ExplorationState(TypedDict):
     """Workflow input and session data for an exploration command."""
@@ -38,6 +39,25 @@ class ExplorationState(TypedDict):
     ]
     idea_id: NotRequired[UUID]
     incoming_message: NotRequired[Message]
+
+
+def with_start_event(
+    node_name: str,
+    operation: Callable[[ExplorationState], dict],
+):
+    """Emit a public start event before executing a graph node."""
+
+    def run(state: ExplorationState) -> dict:
+        writer = get_stream_writer()
+        writer(
+            {
+                "event": "node_started",
+                "node": node_name,
+            }
+        )
+        return operation(state)
+
+    return run
 
 
 def build_exploration_graph(
@@ -230,13 +250,34 @@ def build_exploration_graph(
 
     builder = StateGraph(ExplorationState)
 
-    builder.add_node("explore_images", explore_images)
-    builder.add_node("explore_hypotheses", explore_hypotheses)
-    builder.add_node("revise_hypotheses", revise_hypotheses)
-    builder.add_node("ask_question", ask_question)
-    builder.add_node("create_ideas", create_ideas)
-    builder.add_node("select_idea", select_idea)
-    builder.add_node("build_blueprint", build_blueprint)
+    builder.add_node(
+        "explore_images",
+        with_start_event("explore_images", explore_images),
+    )
+    builder.add_node(
+        "explore_hypotheses",
+        with_start_event("explore_hypotheses", explore_hypotheses),
+    )
+    builder.add_node(
+        "revise_hypotheses",
+        with_start_event("revise_hypotheses", revise_hypotheses),
+    )
+    builder.add_node(
+        "ask_question",
+        with_start_event("ask_question", ask_question),
+    )
+    builder.add_node(
+        "create_ideas",
+        with_start_event("create_ideas", create_ideas),
+    )
+    builder.add_node(
+        "select_idea",
+        with_start_event("select_idea", select_idea),
+    )
+    builder.add_node(
+        "build_blueprint",
+        with_start_event("build_blueprint", build_blueprint),
+    )
     builder.add_edge("build_blueprint", END)
 
     builder.add_conditional_edges(START, route_command)
