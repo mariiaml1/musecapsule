@@ -52,6 +52,7 @@ The Vite development proxy forwards `/api` requests to the local FastAPI backend
 ## Quality Checks
 
 ```bash
+npm test
 npm run build
 npm run lint
 ```
@@ -60,13 +61,20 @@ npm run lint
 
 **Imagination Workspace** — set goals, enter metaphors, explore interpretations through dialogue.
 
-**Agent Flow** — reserved for visualizing the LangGraph execution process.
+**Agent Flow** — displays completed LangGraph nodes during narrative
+exploration through a POST SSE stream. Each step shows its agent role
+and operation. Session persistence is confirmed separately.
 
 **Idea Studio** — review generated ideas, select one and inspect its Engineering Blueprint.
 
 ## Current Limitations
-
-- Agent Flow does not yet display live execution events.
+- Live events currently cover narrative exploration only.
+- Node start events and per-node running statuses are not yet available.
+- Execution events are shown for the current browser interaction and are
+  not persisted as run history.
+- Idea generation and blueprint creation still use regular JSON endpoints.
+- Interrupted streams require reloading the session before retrying;
+  requests are not automatically repeated.
 - The interface is intended for local development.
 - Generated meanings are AI proposals, not automatically confirmed user interpretations.
 - External research is not required to generate ideas or blueprints.

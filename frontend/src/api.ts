@@ -1,4 +1,10 @@
 import type { Intent, Session } from "./types";
+import { AgentEventBuffer } from "./agent-events.ts";
+import type {
+    NodeCompletedEvent,
+    RunFailedEvent,
+    SessionCompletedEvent,
+} from "./agent-events";
 
 export class ApiError extends Error {
     public readonly status: number;
@@ -124,4 +130,84 @@ export async function buildBlueprint(
     );
 
     return readResponse<Session>(response);
+}
+
+/** Stream one exploration request without automatically retrying it. */
+export async function streamMessage(
+    sessionId: string,
+    text: string,
+    onNodeCompleted: (event: NodeCompletedEvent) => void,
+    signal?: AbortSignal,
+): Promise<SessionCompletedEvent | RunFailedEvent> {
+    const response = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}/messages/stream`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "text/event-stream",
+            },
+            body: JSON.stringify({ text }),
+            signal,
+        },
+    );
+
+    if (!response.ok) {
+        // Reuse the existing HTTP error handling.
+        await readResponse<never>(response);
+        throw new Error("Unexpected HTTP error handling result.");
+    }
+
+    const contentType = response.headers
+        .get("content-type")
+        ?.split(";")[0]
+        .trim();
+
+    if (contentType !== "text/event-stream" || !response.body) {
+        throw new Error("Expected an SSE response body.");
+    }
+
+    const reader = response.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+
+    const buffer = new AgentEventBuffer();
+
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+
+            if (done) {
+                buffer.finish();
+                throw new Error(
+                    "Agent stream ended without a final event. Reload the session.",
+                );
+            }
+
+            const events = buffer.push(value);
+
+            for (const event of events) {
+                if (event.event === "node_completed") {
+                    onNodeCompleted(event);
+                    continue;
+                }
+
+                if (
+                    event.event === "session_completed" &&
+                    event.data.session_id !== sessionId
+                ) {
+                    throw new Error("Agent stream returned a different session.");
+                }
+
+                return event;
+            }
+        }
+    } finally {
+        try {
+            await reader.cancel();
+        } catch {
+            // Cleanup must not replace the original result or error.
+        }
+        reader.releaseLock();
+    }
 }

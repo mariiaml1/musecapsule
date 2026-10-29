@@ -1,9 +1,9 @@
-from collections.abc import Callable, Iterator
 import json
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from musecapsule.state import SessionState
-
+from musecapsule.storage import SessionConflictError
 
 def collect_agent_events(
     graph: Any,
@@ -63,9 +63,22 @@ def stream_graph_run(
             },
         )
 
+    except SessionConflictError:
+        yield encode_sse(
+            "run_failed",
+            {
+                "code": "session_conflict",
+                "message": (
+                    "Session changed during processing. " "Reload it before retrying."
+                ),
+            },
+        )
     except Exception:
         # Do not expose prompts, internal state, or exception details.
         yield encode_sse(
             "run_failed",
-            {"message": "Agent execution failed."},
+            {
+                "code": "execution_failed",
+                "message": "Agent execution failed.",
+            },
         )

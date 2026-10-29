@@ -1,5 +1,12 @@
-from musecapsule.agent_events import collect_agent_events
+import json
 
+from musecapsule.agent_events import (
+    collect_agent_events,
+    encode_sse,
+    stream_graph_run,
+)
+from musecapsule.models import Intent
+from musecapsule.state import SessionState
 
 def test_collect_agent_events_preserves_node_order():
     class FakeGraph:
@@ -23,17 +30,6 @@ def test_collect_agent_events_preserves_node_order():
         {"event": "node_completed", "node": "propose_hypotheses"},
         {"event": "node_completed", "node": "ask_question"},
     ]
-
-
-import json
-
-from musecapsule.agent_events import (
-    encode_sse,
-    stream_graph_run,
-)
-from musecapsule.models import Intent
-from musecapsule.state import SessionState
-
 
 def test_encode_sse_produces_valid_event_frame():
     result = encode_sse(

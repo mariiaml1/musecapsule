@@ -2,20 +2,45 @@ import { useState } from "react";
 import {
   createSession,
   loadSession,
-  sendMessage,
+  streamMessage,
   generateIdeas,
   selectIdea,
   buildBlueprint,
 } from "./api";
+import type { AgentRunStatus } from "./agent-events";
 import type { Session } from "./types";
 import "./App.css";
 
-const agents = [
-  { id: "explorer", name: "Metaphor Explorer" },
-  { id: "guide", name: "Imagination Guide" },
-  { id: "evolution", name: "Idea Evolution" },
-  { id: "architect", name: "Idea Architect" },
-];
+const nodeLabels: Record<string, { agent: string; step: string }> = {
+  explore_images: {
+    agent: "Metaphor Explorer",
+    step: "Extract images",
+  },
+  explore_hypotheses: {
+    agent: "Metaphor Explorer",
+    step: "Propose meaning hypotheses",
+  },
+  revise_hypotheses: {
+    agent: "Metaphor Explorer",
+    step: "Revise hypotheses",
+  },
+  ask_question: {
+    agent: "Imagination Guide",
+    step: "Ask an exploration question",
+  },
+  create_ideas: {
+    agent: "Idea Evolution",
+    step: "Generate product ideas",
+  },
+  build_blueprint: {
+    agent: "Idea Architect",
+    step: "Build an engineering blueprint",
+  },
+  select_idea: {
+    agent: "User Selection",
+    step: "Save the selected idea",
+  },
+};
 
 export default function App() {
   const [goal, setGoal] = useState("");
@@ -25,6 +50,8 @@ export default function App() {
   const [narrative, setNarrative] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [agentRunStatus, setAgentRunStatus] = useState<AgentRunStatus>("idle");
+  const [completedNodes, setCompletedNodes] = useState<string[]>([]);
 
   async function run(operation: () => Promise<Session>) {
     setLoading(true);
@@ -33,6 +60,8 @@ export default function App() {
     try {
       const result = await operation();
       setSession(result);
+      setCompletedNodes([]);
+      setAgentRunStatus("idle");
       setSessionId(result.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error.");
@@ -76,17 +105,64 @@ export default function App() {
   async function handleSendMessage() {
     if (!session || !narrative.trim() || loading) return;
 
+    const currentSessionId = session.id;
     const text = narrative;
 
     setLoading(true);
     setError("");
+    setCompletedNodes([]);
+    setAgentRunStatus("running");
 
     try {
-      const updated = await sendMessage(session.id, text);
-      setSession(updated);
+      let result;
+
+      try {
+        result = await streamMessage(
+          currentSessionId,
+          text,
+          (event) => {
+            setCompletedNodes((nodes) => [...nodes, event.data.node]);
+          },
+        );
+      } catch (err) {
+        // Without a terminal event, persistence remains unconfirmed.
+        setAgentRunStatus("interrupted");
+        setError(
+          err instanceof Error ? err.message : "Agent stream interrupted.",
+        );
+        return;
+      }
+
+      if (result.event === "run_failed") {
+        setAgentRunStatus("failed");
+        setError(result.data.message);
+
+        if (result.data.code === "session_conflict") {
+          try {
+            const restored = await loadSession(currentSessionId);
+            setSession(restored);
+          } catch {
+            setError(
+              "Session changed, but reloading failed. Open the session again.",
+            );
+          }
+        }
+
+        return;
+      }
+
+      setAgentRunStatus("completed");
       setNarrative("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
+
+      try {
+        const restored = await loadSession(currentSessionId);
+        setSession(restored);
+      } catch {
+        // Persistence succeeded even if this follow-up read failed.
+        setError(
+          "Exploration was saved, but reloading failed. Open the session again.",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -253,24 +329,39 @@ export default function App() {
 
         <section className="panel flow-panel">
           <h2>Agent Flow</h2>
-          <p className="muted">The journey from metaphor to engineering.</p>
+          <p className="muted">
+            Actual node completions from the latest exploration request.
+          </p>
+
+          <p role="status" aria-live="polite">
+            {agentRunStatus === "idle" && "Waiting for an exploration."}
+            {agentRunStatus === "running" && "Exploration in progress…"}
+            {agentRunStatus === "completed" && "Exploration saved."}
+            {agentRunStatus === "failed" && "Exploration failed."}
+            {agentRunStatus === "interrupted" &&
+              "Result unconfirmed. Reopen the session before retrying."}
+          </p>
 
           <div className="agent-flow">
-            {agents.map((agent, index) => (
-              <div className="agent-step" key={agent.id}>
-                <span className="agent-number">{index + 1}</span>
-                <div>
-                  <strong>{agent.name}</strong>
-                  <p className="muted">
-                    {session ? "Ready" : "Waiting for session"}
-                  </p>
+            {completedNodes.map((node, index) => {
+              const label = nodeLabels[node];
+
+              return (
+                <div className="agent-step" key={`${index}-${node}`}>
+                  <span className="agent-number">{index + 1}</span>
+                  <div>
+                    <strong>{label?.agent ?? node}</strong>
+                    <p className="muted">
+                      {label?.step ?? node} — completed
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <p className="flow-note">
-            Live execution visualization will appear here.
+            A completed node does not confirm that the session was saved.
           </p>
         </section>
 

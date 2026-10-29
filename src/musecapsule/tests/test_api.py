@@ -25,7 +25,7 @@ from musecapsule.state import (
 )
 from musecapsule.storage import SessionStore
 from musecapsule.workflow import build_exploration_graph
-
+from musecapsule.agent_events import encode_sse
 
 def test_api_creates_session_and_restores_it_after_reopening(tmp_path):
     database_path = tmp_path / "sessions.db"
@@ -548,9 +548,6 @@ def test_api_appends_blueprint_versions_for_selected_idea(tmp_path):
         assert restored.json() == second
 
 
-from musecapsule.agent_events import encode_sse
-
-
 def test_api_streams_message_events_and_saves_session(tmp_path):
     database_path = tmp_path / "sessions.db"
 
@@ -847,7 +844,10 @@ def test_api_stream_failure_does_not_persist_partial_state(tmp_path):
             )
             + encode_sse(
                 "run_failed",
-                {"message": "Agent execution failed."},
+                {
+                    "code": "execution_failed",
+                    "message": "Agent execution failed.",
+                },
             )
         )
         assert "Private provider details" not in response.text
@@ -964,7 +964,13 @@ def test_api_stream_conflict_preserves_newer_session(tmp_path):
             + encode_sse("node_completed", {"node": "ask_question"})
             + encode_sse(
                 "run_failed",
-                {"message": "Agent execution failed."},
+                {
+                    "code": "session_conflict",
+                    "message": (
+                        "Session changed during processing. "
+                        "Reload it before retrying."
+                    ),
+                },
             )
         )
 
