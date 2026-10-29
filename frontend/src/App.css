@@ -31,24 +31,11 @@
   line-height: 1.6;
 }
 
-.session-status {
-  color: #b79aff;
-  font-size: 13px;
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: 1.2fr 0.9fr 1fr;
-  gap: 20px;
-  align-items: start;
-}
-
 .panel {
   background: #191924;
   border: 1px solid #303044;
   border-radius: 20px;
   padding: 28px;
-  min-height: 460px;
 }
 
 .panel h2 {
@@ -92,12 +79,6 @@ button:disabled {
 
 button.secondary {
   background: #303044;
-}
-
-.separator {
-  height: 1px;
-  background: #303044;
-  margin: 28px 0;
 }
 
 .agent-flow {
@@ -153,19 +134,7 @@ button.secondary {
   color: #ff929e;
 }
 
-.session-details {
-  margin-top: 28px;
-  padding: 16px;
-  background: #222231;
-  border-radius: 12px;
-  overflow-wrap: anywhere;
-}
-
 @media (max-width: 1100px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
   .app-shell {
     padding: 20px;
   }
@@ -296,4 +265,190 @@ button.secondary {
 
 .idea-origin summary {
   cursor: pointer;
+}
+
+/* Contextual creative workspace */
+.app-shell {
+  max-width: 1240px;
+  padding: 40px 32px 64px;
+}
+.app-header {
+  align-items: start;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.panel {
+  min-width: 0;
+  background: linear-gradient(145deg, #1d1929, #171621);
+  border-color: #3b3149;
+  border-radius: 20px;
+  padding: 28px;
+}
+.goal-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 24px;
+  border: 1px solid #443351;
+  border-radius: 16px;
+  background: #221a30;
+}
+.goal-summary strong {
+  display: block;
+  margin: 8px 0;
+}
+.session-id {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.journey-nav {
+  display: flex;
+  gap: 8px;
+  margin: 26px 0;
+  flex-wrap: wrap;
+}
+.journey-nav button {
+  width: auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  padding: 15px 20px;
+  border-radius: 12px;
+  background: transparent;
+  color: #b9aec8;
+}
+.journey-nav span {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.journey-nav .current {
+  background: #302340;
+  border: 1px solid #9b77d8;
+  color: #f5edff;
+}
+.intention {
+  max-width: 760px;
+  margin: auto;
+  padding: 36px;
+}
+.imagination-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.sources {
+  background: #181621;
+}
+.source-item {
+  padding: 16px 0;
+  border-bottom: 1px solid #3b3049;
+}
+.sources blockquote {
+  margin: 12px 0;
+  padding-left: 14px;
+  border-left: 2px solid #8d68b7;
+  color: #c1b2cf;
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.actions button {
+  width: auto;
+}
+.chat-message p {
+  white-space: pre-wrap;
+}
+.idea-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  margin-top: 24px;
+}
+.idea-card {
+  padding: 24px;
+}
+.idea-origin {
+  font-size: 14px;
+}
+.blueprint-panel {
+  max-width: 900px;
+  margin: auto;
+}
+.restore {
+  max-width: 320px;
+}
+.restore summary {
+  text-align: right;
+}
+summary {
+  cursor: pointer;
+  color: #d1b8ee;
+  padding: 8px 0;
+  font-size: 14px;
+}
+details {
+  margin: 12px 0;
+}
+.activity {
+  margin-top: 28px;
+  padding: 16px 24px;
+}
+.activity > summary {
+  font-weight: 600;
+}
+.activity > summary span {
+  margin-left: 14px;
+  color: #aaa0b9;
+  font-weight: 400;
+}
+:focus-visible {
+  outline: 2px solid #dac4ff;
+  outline-offset: 4px;
+}
+p,
+li {
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: #b0a8bf;
+}
+@media (max-width: 800px) {
+  .imagination-layout {
+    grid-template-columns: 1fr;
+  }
+  .app-shell {
+    padding: 24px 16px;
+  }
+  .app-header,
+  .goal-summary {
+    flex-direction: column;
+  }
+  .journey-nav button {
+    min-width: 42%;
+    padding: 12px;
+  }
+  .restore summary {
+    text-align: left;
+  }
+}
+
+.activity {
+  min-height: 0;
+}
+textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+button.secondary {
+  border: 1px solid #554361;
+  background: transparent;
+  color: #d8c2f0;
 }

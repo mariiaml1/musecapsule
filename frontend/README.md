@@ -59,22 +59,53 @@ The Vite development proxy forwards `/api` requests to the local FastAPI backend
 ## Quality Checks
 
 ```bash
-npm test
+npm run test:all
 npm run build
 npm run lint
 ```
 
-## Application Areas
+## Creative Journey
 
-**Imagination Workspace** — set goals, enter metaphors, explore interpretations through dialogue.
+Navigation changes only the current view, never session data or backend execution.
 
-**Agent Flow** — displays completed LangGraph nodes during narrative
-exploration through a POST SSE stream. Each step shows its agent role
-and operation. Session persistence is confirmed separately.
+- **Intention** — enter a goal and constraints before creating a session. After
+  creation, a compact goal summary replaces the form. Session restoration remains
+  available from the header.
+- **Imagination** — explore through dialogue, with extracted images, exact quotes,
+  and AI-proposed hypotheses alongside it. Generate ideas once saved images exist;
+  answering every clarification question is optional. Unsent text is excluded.
+- **Ideas** — readable cards with image labels and expandable metaphor provenance.
+  Selecting an idea saves the choice, then opens Blueprint without generating it.
+- **Blueprint** — explicitly generate an engineering plan for the saved selection.
+  The selected idea and the blueprint each expose their own source references.
+- **Under the hood / Agent Activity** — collapsible, available from every view.
+  Node activity comes from SSE events. Only terminal session completion confirms
+  persistence; a failed follow-up read does not undo that confirmation.
 
-**Idea Studio** — review generated ideas, select one and inspect its Engineering Blueprint.
+Creation opens Imagination. Restoration opens Blueprint when an idea is selected,
+Ideas when saved ideas exist, and otherwise Imagination. Navigation remains
+available during a request; mutating actions stay disabled while it runs.
+Draft text survives stage navigation and is cleared when opening another session.
+
+## Frontend Structure
+
+`App.tsx` retains session state and command handlers. `JourneyViews.tsx` contains
+navigation, intention, dialogue, and exploration sources. `IdeasView.tsx` and
+`BlueprintView.tsx` render saved products. `IdeaOrigin.tsx` resolves provenance.
+`AgentActivity.tsx` contains the existing graph and lifecycle presentation.
+`api.ts`, `agent-events.ts`, and `flow-path.ts` retain their existing contracts.
+No backend changes are required.
+
+## Tests
+
+`npm test` runs the existing SSE parser, stream contract, and observed-transition
+tests. `npm run test:ui` runs Vitest and React Testing Library in jsdom. These UI
+tests use mocked API functions and graph rendering, so no LLM account or running
+backend is required. `npm run test:all` runs both suites. Browser visual QA and a
+live backend smoke test remain separate checks.
 
 ## Current Limitations
+
 - Live execution events cover narrative exploration, idea generation,
   and engineering blueprint generation.
 - Each command runs separately and persists its final session once.
@@ -92,10 +123,3 @@ and operation. Session persistence is confirmed separately.
 - Diagram topology is maintained in the frontend to match the backend workflow.
 - Observed transitions are derived from sequential node events;
   parallel execution is not supported by this visualization.
-
-## Next Steps
-
-- Live LangGraph execution visualization
-- Agent status and transition events
-- Interactive links between images, hypotheses, ideas and blueprints
-- UI refinements and responsive design improvements
