@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 2026-10-29. Code inspected at `7cbfad7d122ab6fd60cf9d589634e5e56550f596` on master. This is a source review, not a fresh test run.
+Updated: 2026-10-29. Reviewed against master repository tree `013409ed6150ace9ec1b511bf67e73ff45b79785`. Documentation-only source review; no fresh test execution.
 
 ## Product principles
 
@@ -25,6 +25,7 @@ All Python paths below are relative to `src/musecapsule/`.
 | agents/idea_evolution.py | Generate 2–3 ideas and validate sources |
 | agents/idea_architect.py | Generate and validate a metaphor-grounded MVP brief |
 | prompts/ | Separate task instructions |
+| agent_events.py | Sanitized SSE lifecycle events and final-save coordination |
 | workflow.py | LangGraph nodes and deterministic command routing |
 | llm.py | request_generation: synchronous transport, raw response and error handling |
 | bridge/chatgpt.cjs (repository root) | Electron/ChatGPT connection and encrypted credentials |
@@ -91,7 +92,7 @@ Exploration routes end after the Guide. Nodes may represent multiple tasks of on
 
 The existing Tavily adapter makes one basic HTTP search, requests at most three results, disables generated answers/raw content, uses a 20s timeout and no automatic retry. Missing keys and transport/provider/validation failures yield unavailable. Search snippets are attributed external text, not independently verified facts. Search is not wired to the graph or SessionState.
 
-The local ChatGPT bridge uses explicit model selection and a separate DevKit checkout. Prompted JSON plus Pydantic validation is implemented; provider-enforced schemas are not. Listing/inference/subprocess timeouts are 30/60/120s. Credentials stay outside Git; TAVILY_API_KEY is read from the environment by the search demo.
+The local ChatGPT bridge uses explicit model selection and a separate DevKit checkout. Prompted JSON plus Pydantic validation is implemented; provider-enforced schemas are not. Inference/subprocess timeouts are 60/120s. The bridge no longer lists models before every request; the provider validates the explicitly configured model. Safe timing records cover connection stages, generation and total subprocess time. Credentials stay outside Git; TAVILY_API_KEY is read from the environment by the search demo.
 
 ## Persistence and HTTP API
 
@@ -112,10 +113,38 @@ api.create_app accepts a database path and optional processing callables for tes
 
 SQLite persistence is a completed-command checkpoint, not resumption within an interrupted model call. Repeated blueprint generation is a fresh proposal and can change technical details; it is not targeted editing of a previous brief.
 
+## Streaming and frontend
+
+POST /sessions/{id}/messages/stream, /ideas/stream and /briefs/stream coexist with the JSON endpoints. Preconditions are checked before starting the stream. server.py binds all three to the same compiled graph used by non-streaming handlers.
+
+stream_graph_run executes graph.stream once with custom and updates modes. Node wrappers emit node_started before execution; updates produce node_completed. Public lifecycle payloads contain node names, not prompts or full state. After graph completion the API-owned callback saves the final session once with expected_revision. Only then does session_completed expose session_id and revision. run_failed distinguishes session_conflict from execution_failed. HTTP 200, node completion and stream EOF do not establish successful persistence. collect_agent_events remains a separate completion-only helper, not the HTTP streaming implementation.
+
+React uses fetch POST streaming, UTF-8 decoding and an SSE frame buffer. It validates terminal events, handles interruption without automatic generation retries, and reloads the saved session after confirmed completion or a conflict. A failed follow-up read does not undo confirmed persistence.
+
+The contextual journey is Intention, Imagination, Ideas and Blueprint; navigation does not run agents. Users can request ideas once saved images exist without answering every question. Selection is saved explicitly; blueprint generation remains a separate action. Source panels expose image quotes, hypotheses/statuses and proposed metaphor mechanics.
+
+| Frontend file | Responsibility |
+| --- | --- |
+| App.tsx | Session state, API commands and request lifecycle |
+| JourneyViews.tsx / journey.ts | Contextual navigation, intention and exploration views |
+| IdeasView.tsx / BlueprintView.tsx | Saved ideas, selection and latest selected-idea brief |
+| IdeaOrigin.tsx | Source resolution, evidence and interpretation warnings |
+| AgentActivity.tsx / AgentFlow.tsx | Collapsible real node activity and read-only React Flow diagram |
+| api.ts / agent-events.ts | HTTP transport, POST stream consumption and event validation |
+| flow-path.ts | Observed sequential transitions from lifecycle order |
+
+Diagram topology is maintained manually to match backend nodes. Disconnected nodes represent separate commands. Events describe the current interaction; execution history is not persisted. Sequential transitions are inferred from observed order; parallel execution is not supported by this visualization.
+
+## Connection and usage boundaries
+
+Production wiring in server.py and demo.py injects request_generation for extraction, hypothesis proposal/revision, questions, ideas and blueprints. Idea Architect and blueprint generation are the same task. The local SDK uses the connected ChatGPT profile's OAuth permission; there is no configured Platform API-key fallback. Credentials are encrypted outside the repository.
+
+The inspected external DevKit version returns only text from streamResponse. MuseCapsule stores no token counts, remaining allowance or rate-limit metadata. Python currently collapses bridge errors into a generic RuntimeError, so subscription-limit codes do not reach the frontend. Timing logs are not usage/billing records. Exact account allowance must be checked in ChatGPT settings; do not infer it from call counts or latency.
+
 ## Planned, not implemented
 
-Next: minimal React/TypeScript UI consuming the existing API, including explicit loading/error states, no automatic retries for generating POST requests, and a reload path after 409.
+Release preparation: verify clean installation and prompt/bridge packaging, reconcile runtime/dev httpx2 declarations, add CI, and prepare a reproducible portfolio demo. No CI workflow was present in the inspected tree.
 
-Also pending: explicit meaning confirmation, user-directed brief editing, optional research command/storage/source attribution, broader evaluation, token/latency telemetry and total operation budgets, replay/idempotency protection, packaging, Docker and CI. No fine-tuning, unnecessary RAG/vector database, billing or application-generation platform is planned for this MVP.
+Discussed, not committed scope: explicit meaning confirmation, targeted brief editing, optional research orchestration/storage, usage monitoring, total operation budgets, replay/idempotency protection and Docker. Do not build these automatically before the portfolio checkpoint. No fine-tuning, unnecessary RAG/vector database, billing or application-generation platform is planned for this MVP.
 
 Historical image descriptions coexist; semantic correction is prompt-based. Origin validation protects references, not creative correctness. Brief versions have no timestamps/source revisions and are not automatically marked stale after later dialogue.
