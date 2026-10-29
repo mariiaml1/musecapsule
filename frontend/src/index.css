@@ -1,0 +1,11 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #f4f1ff;
+  background: #101018;
+  font-synthesis: none;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}

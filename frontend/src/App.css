@@ -1,0 +1,277 @@
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 36px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+}
+
+.app-header h1 {
+  margin: 8px 0;
+  font-size: 40px;
+}
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #b79aff;
+}
+
+.muted {
+  color: #9694a9;
+  line-height: 1.6;
+}
+
+.session-status {
+  color: #b79aff;
+  font-size: 13px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.panel {
+  background: #191924;
+  border: 1px solid #303044;
+  border-radius: 20px;
+  padding: 28px;
+  min-height: 460px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+label {
+  display: block;
+  margin: 20px 0 8px;
+  font-size: 13px;
+}
+
+input,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background: #11111a;
+  border: 1px solid #38384c;
+  border-radius: 10px;
+  color: #f4f1ff;
+  font: inherit;
+}
+
+button {
+  margin-top: 14px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #8c6bdb;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #303044;
+}
+
+.separator {
+  height: 1px;
+  background: #303044;
+  margin: 28px 0;
+}
+
+.agent-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.agent-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #222231;
+  border: 1px solid #38384c;
+  border-radius: 12px;
+}
+
+.agent-number {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: #42345f;
+  border-radius: 50%;
+}
+
+.agent-step p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.flow-note {
+  color: #77758b;
+  font-size: 12px;
+  margin-top: 30px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 10px;
+  color: #77758b;
+}
+
+.empty-state span {
+  font-size: 42px;
+  color: #b79aff;
+}
+
+.error {
+  color: #ff929e;
+}
+
+.session-details {
+  margin-top: 28px;
+  padding: 16px;
+  background: #222231;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell {
+    padding: 20px;
+  }
+
+  .app-header {
+    align-items: flex-start;
+    gap: 16px;
+    flex-direction: column;
+  }
+}
+
+.conversation {
+  margin-top: 28px;
+}
+
+.chat-message {
+  padding: 14px;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+
+.chat-message.user {
+  background: #302442;
+}
+
+.chat-message.assistant {
+  background: #232b3c;
+}
+
+.chat-message p {
+  margin-bottom: 0;
+  line-height: 1.6;
+}
+
+.idea-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.idea-card {
+  padding: 18px;
+  border: 1px solid #38384c;
+  border-radius: 14px;
+  background: #222231;
+}
+
+.idea-card.selected {
+  border-color: #a78bfa;
+  background: #302743;
+}
+
+.idea-card h3 {
+  margin-top: 0;
+}
+
+.idea-card p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.idea-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.source-tag {
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: #44365d;
+  color: #d4c2ff;
+  font-size: 11px;
+}
+
+.blueprint-panel {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #38384c;
+}
+
+.blueprint-content {
+  margin-top: 24px;
+  line-height: 1.7;
+}
+
+.blueprint-content h4 {
+  color: #c4afff;
+  margin: 24px 0 8px;
+}
+
+.blueprint-content li {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.architecture-item {
+  background: #222231;
+  padding: 14px;
+  border-radius: 10px;
+  margin: 12px 0;
+}
+
+.architecture-item p {
+  margin: 8px 0;
+  font-size: 13px;
+}
