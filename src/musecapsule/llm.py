@@ -36,9 +36,9 @@ def request_generation(
     devkit_dir = devkit_dir.expanduser().resolve()
     executable = devkit_dir / "node_modules" / ".bin" / "electron"
 
-    # Resolve the bridge relative to this source checkout.
-    project_dir = Path(__file__).resolve().parents[2]
-    script = project_dir / "bridge" / "chatgpt.cjs"
+    # Resolve the bundled bridge relative to the installed Python package.
+    script = Path(__file__).resolve().parent / "bridge" / "chatgpt.cjs"
+
     sdk_entry = devkit_dir / "packages" / "local" / "dist" / "index.js"
 
     if not all(path.is_file() for path in (executable, script, sdk_entry)):

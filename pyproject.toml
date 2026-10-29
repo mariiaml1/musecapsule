@@ -34,3 +34,6 @@ testpaths = ["src/musecapsule/tests"]
 [tool.ruff]
 target-version = "py313"
 line-length = 88
+
+[tool.setuptools.package-data]
+musecapsule = ["prompts/*.md", "bridge/*.cjs"]
