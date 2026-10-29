@@ -12,6 +12,7 @@ MuseCapsule transforms spontaneous human metaphors into structured product ideas
 - CSS
 - FastAPI backend
 - LangGraph orchestration (backend)
+- React Flow (@xyflow/react)
 
 ## Features
 
@@ -22,6 +23,9 @@ MuseCapsule transforms spontaneous human metaphors into structured product ideas
 - Select an idea to develop
 - Generate and view an Engineering Blueprint
 - Restore saved session data
+- Visualize the exploration workflow with React Flow
+- Display real node start and completion statuses
+- Highlight observed transitions in the sequential workflow
 
 ## Local Development
 
@@ -81,6 +85,10 @@ and operation. Session persistence is confirmed separately.
 - The interface is intended for local development.
 - Generated meanings are AI proposals, not automatically confirmed user interpretations.
 - External research is not required to generate ideas or blueprints.
+- The diagram currently covers narrative exploration only.
+- Diagram topology is maintained in the frontend to match the backend workflow.
+- Observed transitions are derived from sequential node events;
+  parallel execution is not supported by this visualization.
 
 ## Next Steps
 

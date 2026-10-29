@@ -10,6 +10,7 @@ import {
 import type { AgentRunStatus } from "./agent-events";
 import type { Session } from "./types";
 import "./App.css";
+import { AgentFlow } from "./AgentFlow";
 
 const nodeLabels: Record<string, { agent: string; step: string }> = {
   explore_images: {
@@ -354,7 +355,11 @@ export default function App() {
             {agentRunStatus === "interrupted" &&
               "Result unconfirmed. Reopen the session before retrying."}
           </p>
-
+          <AgentFlow
+            completedNodes={completedNodes}
+            activeNode={activeNode}
+            runStatus={agentRunStatus}
+          />
           <div className="agent-flow">
             {completedNodes.map((node, index) => {
               const label = nodeLabels[node];
