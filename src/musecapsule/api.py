@@ -52,6 +52,7 @@ def create_app(
     process_blueprint: Callable[[SessionState], SessionState] | None = None,
     stream_message: MessageStreamHandler | None = None,
     stream_ideas: SessionStreamHandler | None = None,
+    stream_blueprint: SessionStreamHandler | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -326,5 +327,50 @@ def create_app(
             )
 
         return process_and_save(session, process_blueprint)
+
+    @app.post("/sessions/{session_id}/briefs/stream")
+    def stream_session_blueprint(session_id: UUID) -> StreamingResponse:
+        """Stream blueprint generation for the explicitly selected idea."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        if session.selected_idea_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Select an idea before requesting a blueprint.",
+            )
+
+        if not any(idea.id == session.selected_idea_id for idea in session.ideas):
+            raise HTTPException(
+                status_code=409,
+                detail="The selected idea is missing from this session.",
+            )
+
+        handler = stream_blueprint
+        if handler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Blueprint streaming is not configured.",
+            )
+
+        def save_result(updated: SessionState) -> None:
+            store.save(
+                updated,
+                expected_revision=session.revision,
+            )
+
+        return StreamingResponse(
+            handler(session, save_result),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app

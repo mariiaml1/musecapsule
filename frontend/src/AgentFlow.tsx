@@ -36,6 +36,11 @@ const layout = [
         label: "Idea Evolution\nGenerate product ideas",
         position: { x: 180, y: 490 },
     },
+    {
+        id: "build_blueprint",
+        label: "Idea Architect\nBuild engineering blueprint",
+        position: { x: 180, y: 640 },
+  },
 ];
 
 const edges: Edge[] = [

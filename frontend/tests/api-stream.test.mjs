@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { streamIdeas, streamMessage } from "../src/api.ts";
+import {
+    streamBlueprint,
+    streamIdeas,
+    streamMessage,
+} from "../src/api.ts";
 
 /** Build a response whose UTF-8 bytes arrive individually. */
 function createStreamResponse (text) {
@@ -179,5 +183,50 @@ test("streams ideas without sending a narrative body", async (t) => {
     assert.deepEqual(result, {
         event: "session_completed",
         data: { session_id: "session-1", revision: 5 },
+    });
+});
+
+test("streams a blueprint for the saved selection", async (t) => {
+    const received = [];
+
+    const fetchMock = t.mock.method(
+        globalThis,
+        "fetch",
+        async (url, options) => {
+            assert.equal(url, "/api/sessions/session-1/briefs/stream");
+            assert.equal(options.method, "POST");
+            assert.equal(options.body, undefined);
+            assert.equal(options.headers.Accept, "text/event-stream");
+
+            return createStreamResponse(
+                'event: node_started\n' +
+                'data: {"node":"build_blueprint"}\n\n' +
+                'event: node_completed\n' +
+                'data: {"node":"build_blueprint"}\n\n' +
+                'event: session_completed\n' +
+                'data: {"session_id":"session-1","revision":6}\n\n',
+            );
+        },
+    );
+
+    const result = await streamBlueprint(
+        "session-1",
+        (event) => received.push(event),
+    );
+
+    assert.equal(fetchMock.mock.callCount(), 1);
+    assert.deepEqual(received, [
+        {
+            event: "node_started",
+            data: { node: "build_blueprint" },
+        },
+        {
+            event: "node_completed",
+            data: { node: "build_blueprint" },
+        },
+    ]);
+    assert.deepEqual(result, {
+        event: "session_completed",
+        data: { session_id: "session-1", revision: 6 },
     });
 });

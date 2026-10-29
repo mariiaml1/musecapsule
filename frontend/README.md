@@ -72,9 +72,14 @@ and operation. Session persistence is confirmed separately.
 **Idea Studio** — review generated ideas, select one and inspect its Engineering Blueprint.
 
 ## Current Limitations
+- Live execution events cover narrative exploration, idea generation,
+  and engineering blueprint generation.
+- Each command runs separately and persists its final session once.
+- Idea selection is deterministic and does not invoke an LLM.
+- Agent Flow displays the latest request; execution history is not persisted.
+- Disconnected diagram nodes represent separate user-triggered commands.
 - Execution events are shown for the current browser interaction and are
   not persisted as run history.
-- Idea generation and blueprint creation still use regular JSON endpoints.
 - Interrupted streams require reloading the session before retrying;
   requests are not automatically repeated.
 - The interface is intended for local development.

@@ -1193,3 +1193,197 @@ def test_api_rejects_idea_stream_without_images(tmp_path):
         restored = client.get(f"/sessions/{created['id']}")
         assert restored.status_code == 200
         assert restored.json() == created
+
+
+def test_api_streams_blueprint_and_preserves_origin(tmp_path):
+    database_path = tmp_path / "sessions.db"
+
+    message = Message(
+        role="user",
+        text="A golden note floats inside a capsule.",
+    )
+    evidence = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    image = ImageFragment(
+        label="Golden note",
+        evidence=[evidence],
+    )
+    hypothesis = Hypothesis(
+        statement="The note could represent one valuable result.",
+        image_ids=[image.id],
+        evidence=[evidence],
+    )
+    idea = ProductIdea(
+        title="Experiment Capsule",
+        description="Save and inspect one AI experiment result.",
+        goal_alignment="A bounded AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+    )
+    session = SessionState(
+        intent=Intent(
+            goal="Build an AI portfolio project",
+            constraints=["Solo development", "Small MVP"],
+        ),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+        ideas=[idea],
+        selected_idea_id=idea.id,
+    )
+    SessionStore(database_path).save(session)
+
+    generation_calls = []
+    saved_revisions = []
+
+    def generate_architecture(context):
+        generation_calls.append(context)
+
+        return json.dumps(
+            {
+                "idea_summary": "A workspace for one AI experiment.",
+                "metaphor_origin": {
+                    "meaning_basis": ("The note may represent one valuable result."),
+                    "mechanic_mapping": (
+                        "Each workspace holds one experiment and its result."
+                    ),
+                    "image_ids": [str(image.id)],
+                    "hypothesis_ids": [str(hypothesis.id)],
+                },
+                "problem": "Small experiments are difficult to revisit.",
+                "audience": "Developers building AI prototypes.",
+                "core_scenario": ("Run an experiment, save its result, and reopen it."),
+                "features": ["Run and save one experiment"],
+                "risks": ["Model responses may be invalid"],
+                "acceptance_criteria": ["A saved experiment can be reopened"],
+                "suggested_architecture": [],
+            }
+        )
+
+    def unexpected_generation(_):
+        pytest.fail("Only the architect generator should be invoked.")
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=unexpected_generation,
+        generate_architecture=generate_architecture,
+    )
+
+    def stream_blueprint(current, save_result):
+        def save_and_record(updated):
+            save_result(updated)
+            saved_revisions.append(updated.revision)
+
+        return stream_graph_run(
+            graph,
+            {
+                "session": current,
+                "command": "build_blueprint",
+            },
+            save_and_record,
+        )
+
+    app = create_app(
+        database_path,
+        stream_blueprint=stream_blueprint,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/sessions/{session.id}/briefs/stream",
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.text == (
+            encode_sse("node_started", {"node": "build_blueprint"})
+            + encode_sse(
+                "node_completed",
+                {"node": "build_blueprint"},
+            )
+            + encode_sse(
+                "session_completed",
+                {
+                    "session_id": str(session.id),
+                    "revision": 1,
+                },
+            )
+        )
+
+    assert len(generation_calls) == 1
+    assert saved_revisions == [1]
+
+    with TestClient(create_app(database_path)) as client:
+        response = client.get(f"/sessions/{session.id}")
+        assert response.status_code == 200
+        restored = SessionState.model_validate(response.json())
+
+    assert restored.revision == 1
+    assert restored.intent == session.intent
+    assert restored.messages == session.messages
+    assert restored.images == session.images
+    assert restored.hypotheses == session.hypotheses
+    assert restored.ideas == session.ideas
+    assert restored.selected_idea_id == idea.id
+    assert len(restored.briefs) == 1
+
+    brief = restored.briefs[0]
+    assert brief.idea_id == idea.id
+    assert brief.constraints == session.intent.constraints
+    assert brief.metaphor_origin.image_ids == [image.id]
+    assert brief.metaphor_origin.hypothesis_ids == [hypothesis.id]
+    assert brief.metaphor_origin.user_confirmed is False
+
+    with sqlite3.connect(database_path) as connection:
+        revisions = connection.execute(
+            """
+            SELECT revision
+            FROM session_snapshots
+            WHERE session_id = ?
+            ORDER BY revision
+            """,
+            (str(session.id),),
+        ).fetchall()
+
+    assert revisions == [(0,), (1,)]
+
+
+def test_api_rejects_blueprint_stream_without_selection(tmp_path):
+    database_path = tmp_path / "sessions.db"
+
+    def unexpected_stream(session, save_result):
+        pytest.fail("Blueprint generation requires an explicit selection.")
+
+    app = create_app(
+        database_path,
+        stream_blueprint=unexpected_stream,
+    )
+
+    with TestClient(app) as client:
+        created_response = client.post(
+            "/sessions",
+            json={
+                "goal": "Build an AI portfolio project",
+                "constraints": ["Small MVP"],
+            },
+        )
+        assert created_response.status_code == 201
+        created = created_response.json()
+
+        response = client.post(
+            f"/sessions/{created['id']}/briefs/stream",
+        )
+
+        assert response.status_code == 409
+        assert response.json() == {
+            "detail": "Select an idea before requesting a blueprint.",
+        }
+
+        restored = client.get(f"/sessions/{created['id']}")
+        assert restored.status_code == 200
+        assert restored.json() == created

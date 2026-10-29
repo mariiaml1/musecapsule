@@ -135,7 +135,7 @@ export async function buildBlueprint(
 /** Execute one session command and consume its SSE response. */
 async function streamSessionRequest(
     sessionId: string,
-    action: "messages" | "ideas",
+    action: "messages" | "ideas" | "briefs",
     body: { text: string } | undefined,
     onNodeEvent: (event: NodeLifecycleEvent) => void,
     signal?: AbortSignal,
@@ -243,6 +243,21 @@ export function streamIdeas(
     return streamSessionRequest(
         sessionId,
         "ideas",
+        undefined,
+        onNodeEvent,
+        signal,
+    );
+}
+
+/** Build a blueprint for the selected idea through the streaming endpoint. */
+export function streamBlueprint(
+    sessionId: string,
+    onNodeEvent: (event: NodeLifecycleEvent) => void,
+    signal?: AbortSignal,
+): Promise<SessionCompletedEvent | RunFailedEvent> {
+    return streamSessionRequest(
+        sessionId,
+        "briefs",
         undefined,
         onNodeEvent,
         signal,

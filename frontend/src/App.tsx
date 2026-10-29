@@ -4,7 +4,7 @@ import {
   loadSession,
   streamMessage,
   selectIdea,
-  buildBlueprint,
+  streamBlueprint,
   streamIdeas,
 } from "./api";
 import type { AgentRunStatus, NodeLifecycleEvent } from "./agent-events";
@@ -258,16 +258,58 @@ export default function App() {
   async function handleBuildBlueprint() {
     if (!session || !session.selected_idea_id || loading) return;
 
+    const currentSessionId = session.id;
+
     setLoading(true);
     setError("");
+    setCompletedNodes([]);
+    setActiveNode(null);
+    setAgentRunStatus("running");
 
     try {
-      const updated = await buildBlueprint(session.id);
-      setSession(updated);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Blueprint generation failed.",
-      );
+      let result;
+
+      try {
+        result = await streamBlueprint(
+          currentSessionId,
+          handleNodeEvent,
+        );
+      } catch (err) {
+        setAgentRunStatus("interrupted");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Blueprint stream interrupted. Reopen the session.",
+        );
+        return;
+      }
+
+      if (result.event === "run_failed") {
+        setAgentRunStatus("failed");
+        setError(result.data.message);
+
+        if (result.data.code === "session_conflict") {
+          try {
+            setSession(await loadSession(currentSessionId));
+          } catch {
+            setError(
+              "Session changed, but reloading failed. Open the session again.",
+            );
+          }
+        }
+
+        return;
+      }
+
+      setAgentRunStatus("completed");
+
+      try {
+        setSession(await loadSession(currentSessionId));
+      } catch {
+        setError(
+          "Blueprint was saved, but reloading failed. Open the session again.",
+        );
+      }
     } finally {
       setLoading(false);
     }

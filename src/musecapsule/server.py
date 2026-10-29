@@ -120,6 +120,20 @@ def create_local_app() -> FastAPI:
             save_result,
         )
 
+    def stream_blueprint(
+        session: SessionState,
+        save_result: Callable[[SessionState], None],
+    ) -> Iterator[str]:
+        """Stream blueprint generation through the existing graph."""
+        return stream_graph_run(
+            graph,
+            {
+                "session": session,
+                "command": "build_blueprint",
+            },
+            save_result,
+        )
+
     return create_app(
         database_path,
         process_message=process_message,
@@ -127,4 +141,5 @@ def create_local_app() -> FastAPI:
         process_blueprint=process_blueprint,
         stream_message=stream_message,
         stream_ideas=stream_ideas,
+        stream_blueprint=stream_blueprint,
     )
