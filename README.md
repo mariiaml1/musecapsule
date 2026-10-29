@@ -1,18 +1,55 @@
-## ChatGPT image extraction demo
+# MuseCapsule AI — The AI Imagination Engine
 
-The demo calls ChatGPT through a local Electron bridge, validates the
-response with Pydantic, verifies source quotes, and updates session state.
+Turn spontaneous metaphors into traceable product ideas and engineering
+blueprints, guided by an explicit user goal and constraints.
 
-### Requirements
+## Current MVP
+
+- Explore narrative images through open-ended dialogue.
+- Extract images with exact source quotes.
+- Propose and revise meaning hypotheses while preserving revision history.
+- Generate product ideas linked to images and hypotheses.
+- Select an idea and generate an engineering blueprint.
+- Save and restore sessions with SQLite.
+- Observe real LangGraph node lifecycle events through SSE.
+
+AI interpretations are proposals, not established user facts or
+automatically confirmed meanings.
+
+## Requirements
 
 - Python 3.13
-- Node.js >= 22.12
-- macOS (the currently tested platform)
-- An eligible ChatGPT account with ChatGPT plan usage enabled
+- Node.js 24
+- npm
+- macOS for the currently tested live ChatGPT connection
+- An eligible ChatGPT account with ChatGPT plan usage enabled for live generation
 
-### Set up the ChatGPT DevKit
+Automated checks do not require ChatGPT authorization or live generation.
 
-Run these commands from the directory containing your MuseCapsule checkout:
+## Install and Check
+
+From the repository root:
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m pytest -q
+```
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm ci
+npm run test:all
+npm run build
+npm run lint
+```
+
+## Set Up Live Generation
+
+From the directory containing the MuseCapsule checkout:
 
 ```bash
 git clone https://github.com/openai/sign-in-with-chatgpt-devkit.git
@@ -22,30 +59,64 @@ npm ci
 npm run build -w @siwc/local
 ```
 
-Only the local SDK needs to be built. The Paste Perfect desktop example
-is not required.
+Only the local SDK is required; the Paste Perfect desktop application
+does not need to be built.
 
-### Run the demo
-
-From the MuseCapsule project root, with the Python environment activated:
+From the MuseCapsule repository root, with the Python environment activated:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m musecapsule.demo --devkit-dir ../sign-in-with-chatgpt-devkit
+export MUSECAPSULE_DEVKIT_DIR="../sign-in-with-chatgpt-devkit"
+export MUSECAPSULE_MODEL="gpt-6.1-sol"
+python -m uvicorn musecapsule.server:create_local_app --factory --reload
 ```
 
-On first use, a browser opens for ChatGPT authorization. Credentials are
-stored outside the repository and encrypted using macOS Keychain-backed
-Electron safeStorage.
+In a separate terminal:
 
-The demo makes a live model request and consumes ChatGPT plan allowance.
+```bash
+cd frontend
+npm ci
+npm run dev
+```
 
-### Current limitations
+Open http://127.0.0.1:5173.
+Backend API documentation is available at http://127.0.0.1:8000/docs.
 
-- Extracts images from one demo message.
-- Uses prompted JSON with application-side validation; schema-constrained
-  generation is not yet implemented.
-- Image boundaries and labels may vary between requests.
-- Uses the first model returned by the SDK.
-- Requires a separate DevKit checkout.
-- Does not yet persist sessions or orchestrate the four planned agent roles.
+On the first live generation request, the bridge may open a browser for
+ChatGPT authorization. Credentials are stored outside the repository
+using Electron safeStorage.
+
+Live generation consumes the connected account's ChatGPT plan allowance
+or available credits. Automated tests use controlled substitutes.
+
+## Try the Main Scenario
+
+1. Create a session with your goal and constraints.
+2. Describe an imagined scene and optionally continue the dialogue.
+3. Generate ideas without having to answer every question.
+4. Select an idea and explicitly request its blueprint.
+5. Copy the session ID to restore the saved session later.
+
+The default database is `data/musecapsule.db`.
+Do not commit local databases, credentials, or personal narratives.
+
+## Architecture and Evaluation
+
+- [Architecture](ARCHITECTURE.md)
+- [Development progress](PROGRESS.md)
+- [Frontend documentation](frontend/README.md)
+- [Manual evaluation scenarios and reports](evals/README.md)
+
+Automated tests verify deterministic contracts and state behavior.
+Manual evaluations assess relevance, metaphor grounding, diversity,
+and feasibility. Individual successful runs do not establish reliability
+across all inputs.
+
+## Limitations
+
+- Local development setup; no production authentication or hosted deployment.
+- Model JSON is validated by the application, not constrained by a provider schema.
+- Generation quality and latency vary.
+- Hypothesis status semantics require further evaluation.
+- Agent activity displays the current run rather than persisted execution history.
+- External research is optional; the Tavily adapter is separate from the main workflow.
+- No automated novelty or market-demand validation.
