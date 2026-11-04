@@ -7,7 +7,7 @@ from musecapsule.knowledge import (
 )
 
 from musecapsule.embeddings import create_local_embedder
-from musecapsule.retrieval import retrieve_semantic_chunks
+from musecapsule.retrieval import index_chunks, search_index
 
 def main() -> None:
     """Evaluate lexical retrieval on a small synthetic reference corpus."""
@@ -57,6 +57,17 @@ def main() -> None:
     # Load the embedding model once for the entire evaluation.
     embed = create_local_embedder()
 
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+
+    indexed = index_chunks(
+        chunks,
+        session_id=session_id,
+        model_name=model_name,
+        embed=embed,
+    )
+
+    print(f"Indexed chunks: {len(indexed)}")
+
     unrelated_queries = [
         "How do I bake sourdough bread?",
         "What causes lunar eclipses?",
@@ -75,10 +86,11 @@ def main() -> None:
             session_id=session_id,
             limit=3,
         )
-        semantic = retrieve_semantic_chunks(
+        semantic = search_index(
             query,
-            chunks,
+            indexed,
             session_id=session_id,
+            model_name=model_name,
             embed=embed,
             limit=3,
             min_score=0.30,
@@ -115,10 +127,11 @@ def main() -> None:
     print("\nQueries without relevant sources:")
 
     for query in unrelated_queries:
-        results = retrieve_semantic_chunks(
+        results = search_index(
             query,
-            chunks,
+            indexed,
             session_id=session_id,
+            model_name=model_name,
             embed=embed,
             limit=1,
             min_score=0.30,

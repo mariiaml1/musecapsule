@@ -3,7 +3,13 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from musecapsule.knowledge import ReferenceDocument, chunk_document, retrieve_chunks
+from musecapsule.knowledge import (
+    ReferenceChunk,
+    ReferenceDocument,
+    chunk_document,
+    retrieve_chunks,
+    validate_chunk_source,
+)
 
 
 def test_reference_document_preserves_source_and_session():
@@ -47,6 +53,7 @@ def test_reference_documents_receive_distinct_ids():
 
     assert first.id != second.id
 
+
 def test_chunk_document_preserves_sources_and_overlap():
     document = ReferenceDocument(
         session_id=uuid4(),
@@ -67,7 +74,7 @@ def test_chunk_document_preserves_sources_and_overlap():
     for chunk in chunks:
         assert chunk.document_id == document.id
         assert chunk.session_id == document.session_id
-        assert chunk.text == document.text[chunk.start:chunk.end]
+        assert chunk.text == document.text[chunk.start : chunk.end]
 
     for previous, current in zip(chunks, chunks[1:]):
         assert previous.text[-2:] == current.text[:2]
@@ -128,11 +135,7 @@ def test_retrieve_chunks_ranks_matches_and_preserves_sources():
             text="SQLite stores session snapshots.",
         ),
     ]
-    chunks = [
-        chunk
-        for document in documents
-        for chunk in chunk_document(document)
-    ]
+    chunks = [chunk for document in documents for chunk in chunk_document(document)]
     before = [chunk.model_dump() for chunk in chunks]
 
     results = retrieve_chunks(
@@ -195,3 +198,72 @@ def test_retrieve_chunks_rejects_invalid_requests(query, limit):
             session_id=uuid4(),
             limit=limit,
         )
+
+
+def test_validate_chunk_source_accepts_exact_source_without_changes():
+    document = ReferenceDocument(
+        session_id=uuid4(),
+        title="Reliability",
+        text="Use bounded retries.",
+    )
+    chunk = ReferenceChunk(
+        document_id=document.id,
+        session_id=document.session_id,
+        start=4,
+        end=11,
+        text="bounded",
+    )
+    before_document = document.model_dump()
+    before_chunk = chunk.model_dump()
+
+    validate_chunk_source(chunk, document)
+
+    assert document.model_dump() == before_document
+    assert chunk.model_dump() == before_chunk
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected_error"),
+    [
+        (
+            {"document_id": uuid4()},
+            "Chunk references a different document.",
+        ),
+        (
+            {"session_id": uuid4()},
+            "Chunk and document belong to different sessions.",
+        ),
+        (
+            {"start": 100, "end": 107},
+            "Chunk offsets are outside the document.",
+        ),
+        (
+            {"text": "fiction"},
+            "Chunk text does not match its source.",
+        ),
+    ],
+)
+def test_validate_chunk_source_rejects_invalid_provenance(changes, expected_error):
+    document = ReferenceDocument(
+        session_id=uuid4(),
+        title="Reliability",
+        text="Use bounded retries.",
+    )
+    chunk = ReferenceChunk(
+        document_id=document.id,
+        session_id=document.session_id,
+        start=4,
+        end=11,
+        text="bounded",
+    )
+    invalid = ReferenceChunk.model_validate(
+        {
+            **chunk.model_dump(),
+            **changes,
+        }
+    )
+
+    with pytest.raises(ValueError) as error:
+        validate_chunk_source(invalid, document)
+
+    assert str(error.value) == expected_error

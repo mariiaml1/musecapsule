@@ -161,3 +161,27 @@ def retrieve_chunks(
     results.sort(key=lambda result: result.score, reverse=True)
 
     return results[:limit]
+
+
+def validate_chunk_source(
+    chunk: ReferenceChunk,
+    document: ReferenceDocument,
+) -> None:
+    """Verify a fragment against its original document.
+
+    Check document identity, session ownership, offsets, and exact text.
+
+    Raises:
+        ValueError: If the fragment does not match its declared source.
+    """
+    if chunk.document_id != document.id:
+        raise ValueError("Chunk references a different document.")
+
+    if chunk.session_id != document.session_id:
+        raise ValueError("Chunk and document belong to different sessions.")
+
+    if not 0 <= chunk.start < chunk.end <= len(document.text):
+        raise ValueError("Chunk offsets are outside the document.")
+
+    if chunk.text != document.text[chunk.start : chunk.end]:
+        raise ValueError("Chunk text does not match its source.")
