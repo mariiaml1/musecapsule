@@ -23,6 +23,7 @@ blueprints, guided by an explicit user goal and constraints.
 - Select an idea and generate an engineering blueprint.
 - Save and restore sessions with SQLite.
 - Observe real LangGraph node lifecycle events through SSE.
+- Optionally add session-scoped reference text and generate blueprints with validated citations.
 
 AI interpretations are proposals, not established user facts or
 automatically confirmed meanings.
@@ -139,6 +140,67 @@ using Electron safeStorage.
 
 Live generation consumes the connected account's ChatGPT plan allowance
 or available credits. Automated tests use controlled substitutes.
+
+## Optional Local RAG
+
+Reference material can support engineering blueprint generation without
+replacing the selected idea or its metaphorical foundation.
+
+Install the optional dependencies from the repository root:
+
+```bash
+python -m pip install -e ".[dev,rag]"
+```
+
+With the live-generation environment configured, start the backend:
+
+```bash
+MUSECAPSULE_RAG_ENABLED=1 python -m uvicorn musecapsule.server:create_local_app --factory --reload
+```
+
+When RAG is enabled, the backend creates a shared embedding adapter at
+startup. The first startup may download the model. Embeddings are computed
+locally with FastEmbed and ONNX Runtime using
+`sentence-transformers/all-MiniLM-L6-v2` (384 dimensions).
+Blueprint generation still uses the configured ChatGPT connection.
+
+In the frontend:
+
+1. Open a session and navigate to Blueprint.
+2. Expand Add supporting material.
+3. Enter a title and reference text, then select Save reference.
+4. Wait for confirmation that the material was saved and indexed.
+5. Explicitly generate a new blueprint for a selected idea with an active
+   foundation.
+
+Documents and their chunk embeddings are persisted in SQLite and scoped
+to the session. Adding reference material does not change the session
+revision, rewrite existing blueprints, or automatically invoke generation.
+
+For a new blueprint, retrieval uses the idea title and description,
+returns up to three matching chunks, and applies a cosine similarity
+threshold of 0.30. This threshold is experimental, not a calibrated
+relevance guarantee.
+
+The architect may cite supplied passages. The application validates
+document and chunk identifiers and exact quotation matching.
+Citations are displayed under Reference material in the blueprint.
+A blueprint may contain no citations; this does not establish that
+retrieval was skipped.
+
+Current limitations:
+
+- Input uses pasted text; file upload and a saved-document browser are not implemented.
+- Character-based chunks and retrieval queries must fit the embedding
+  token limit; oversized inputs are rejected rather than silently truncated.
+- Exact quotation validation does not establish semantic support,
+  factual correctness, or product effectiveness.
+- Retrieval evaluation currently uses a small synthetic dataset.
+- Local embeddings do not make generation fully offline: retrieved
+  passages are included in the request sent through the ChatGPT bridge.
+
+RAG is disabled unless `MUSECAPSULE_RAG_ENABLED=1`.
+The standalone Tavily web-search adapter remains separate.
 
 ## Try the Main Scenario
 
