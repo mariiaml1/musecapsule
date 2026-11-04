@@ -99,6 +99,20 @@ export async function generateIdeas(
     return readResponse<Session>(response);
 }
 
+/** Propose and persist a revised idea without changing the selection. */
+export async function reviseIdea(
+    sessionId: string,
+    ideaId: string,
+): Promise<Session> {
+    const response = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}` +
+        `/ideas/${encodeURIComponent(ideaId)}/revisions`,
+        { method: "POST" },
+    );
+
+    return readResponse<Session>(response);
+}
+
 /** Select one existing idea without invoking an LLM. */
 export async function selectIdea(
     sessionId: string,

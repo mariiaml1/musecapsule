@@ -59,6 +59,7 @@ jobs:
               "prompts/hypothesis_revisions.md",
               "prompts/imagination_guide.md",
               "prompts/idea_evolution.md",
+              "prompts/idea_revision.md",
               "prompts/idea_architect.md",
               "bridge/chatgpt.cjs",
           ]

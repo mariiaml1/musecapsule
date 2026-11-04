@@ -274,6 +274,60 @@ def append_product_ideas(
     )
 
 
+def append_revised_product_idea(
+    state: SessionState,
+    idea: ProductIdea,
+) -> SessionState:
+    """Append a revised idea without replacing its previous version.
+
+    Require an existing previous version and active, linked hypotheses.
+    Preserve the current selection, saved blueprints, and input state.
+
+    Raises:
+        ValueError: If version or source references are invalid.
+        IdeaFoundationError: If a linked hypothesis is missing or inactive.
+    """
+    if idea.previous_idea_id is None:
+        raise ValueError("A revised idea must reference its previous version.")
+
+    if any(item.id == idea.id for item in state.ideas):
+        raise ValueError("Product idea already exists.")
+
+    if not any(item.id == idea.previous_idea_id for item in state.ideas):
+        raise ValueError("Previous idea does not exist.")
+
+    existing_image_ids = {image.id for image in state.images}
+    idea_image_ids = set(idea.image_ids)
+
+    if not idea_image_ids.issubset(existing_image_ids):
+        raise ValueError("Idea references a missing image.")
+
+    if not idea.hypothesis_ids:
+        raise ValueError("A revised idea must reference a meaning hypothesis.")
+
+    validate_idea_foundation(idea, state.hypotheses)
+
+    hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in state.hypotheses}
+    for hypothesis_id in idea.hypothesis_ids:
+        hypothesis = hypotheses_by_id[hypothesis_id]
+
+        if not set(hypothesis.image_ids).issubset(idea_image_ids):
+            raise ValueError("Idea must preserve all images linked to its hypotheses.")
+
+    return SessionState(
+        id=state.id,
+        intent=state.intent,
+        messages=state.messages,
+        images=state.images,
+        hypotheses=state.hypotheses,
+        hypothesis_history=state.hypothesis_history,
+        ideas=[*state.ideas, idea],
+        selected_idea_id=state.selected_idea_id,
+        briefs=state.briefs,
+        revision=state.revision + 1,
+    )
+
+
 def select_product_idea(
     state: SessionState,
     idea_id: UUID,

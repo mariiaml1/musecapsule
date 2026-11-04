@@ -5,7 +5,10 @@ from uuid import UUID
 from langgraph.graph import END, START, StateGraph
 
 from musecapsule.agents.idea_architect import generate_blueprint
-from musecapsule.agents.idea_evolution import generate_product_ideas
+from musecapsule.agents.idea_evolution import (
+    generate_product_ideas,
+    revise_product_idea,
+)
 from musecapsule.agents.imagination_guide import generate_exploration_question
 from musecapsule.agents.metaphor_explorer import (
     extract_images,
@@ -20,6 +23,7 @@ from musecapsule.state import (
     append_image_fragment,
     append_message,
     append_product_ideas,
+    append_revised_product_idea,
     revise_hypothesis_status,
     select_product_idea,
 )
@@ -35,6 +39,7 @@ class ExplorationState(TypedDict):
             "generate_ideas",
             "select_idea",
             "build_blueprint",
+            "revise_idea",
         ]
     ]
     idea_id: NotRequired[UUID]
@@ -68,6 +73,7 @@ def build_exploration_graph(
     generate_question: Callable[[str], str],
     generate_ideas: Callable[[str], str],
     generate_architecture: Callable[[str], str],
+    generate_idea_revision: Callable[[str], str] | None = None,
 ):
     """Compile an exploration workflow for one user message."""
 
@@ -171,7 +177,13 @@ def build_exploration_graph(
 
     def route_command(
         state: ExplorationState,
-    ) -> Literal["explore_images", "create_ideas", "select_idea", "build_blueprint"]:
+    ) -> Literal[
+        "explore_images",
+        "create_ideas",
+        "select_idea",
+        "build_blueprint",
+        "revise_idea",
+    ]:
         """Route an explicit command and validate its required input."""
         command = state.get("command", "explore")
 
@@ -188,6 +200,19 @@ def build_exploration_graph(
                 raise ValueError("Idea selection requires an idea ID.")
 
             return "select_idea"
+
+        if command == "revise_idea":
+            idea_id = state.get("idea_id")
+            if idea_id is None:
+                raise ValueError("Idea revision requires an idea ID.")
+
+            if not any(idea.id == idea_id for idea in state["session"].ideas):
+                raise ValueError("Idea to revise does not exist.")
+
+            if generate_idea_revision is None:
+                raise ValueError("Idea revision generation is not configured.")
+
+            return "revise_idea"
 
         if command == "explore":
             message = state.get("incoming_message")
@@ -248,7 +273,48 @@ def build_exploration_graph(
             "session": append_blueprint(session, brief),
         }
 
+    def revise_idea(state: ExplorationState) -> dict:
+        """Append a revised idea while preserving the current selection."""
+        session = state["session"]
+        idea_id = state.get("idea_id")
+
+        previous_idea = next(
+            (idea for idea in session.ideas if idea.id == idea_id),
+            None,
+        )
+        if previous_idea is None:
+            raise ValueError("Idea to revise does not exist.")
+
+        generator = generate_idea_revision
+        if generator is None:
+            raise ValueError("Idea revision generation is not configured.")
+
+        result = revise_product_idea(
+            previous_idea,
+            session.intent,
+            messages=session.messages,
+            images=session.images,
+            hypotheses=session.hypotheses,
+            generate=generator,
+        )
+
+        for hypothesis in result.new_hypotheses:
+            session = append_hypothesis(session, hypothesis)
+
+        session = append_revised_product_idea(
+            session,
+            result.ideas[0],
+        )
+
+        return {"session": session}
+
     builder = StateGraph(ExplorationState)
+
+    builder.add_node(
+        "revise_idea",
+        with_start_event("revise_idea", revise_idea),
+    )
+    builder.add_edge("revise_idea", END)
 
     builder.add_node(
         "explore_images",

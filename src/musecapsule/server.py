@@ -1,6 +1,7 @@
 import os
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import FastAPI
 
@@ -51,6 +52,7 @@ def create_local_app() -> FastAPI:
         generate_question=create_generator("imagination_guide.md"),
         generate_ideas=create_generator("idea_evolution.md"),
         generate_architecture=create_generator("idea_architect.md"),
+        generate_idea_revision=create_generator("idea_revision.md"),
     )
 
     def process_message(
@@ -73,6 +75,20 @@ def create_local_app() -> FastAPI:
             {
                 "session": session,
                 "command": "generate_ideas",
+            }
+        )
+        return result["session"]
+
+    def process_idea_revision(
+        session: SessionState,
+        idea_id: UUID,
+    ) -> SessionState:
+        """Revise one idea through the existing graph without changing selection."""
+        result = graph.invoke(
+            {
+                "session": session,
+                "command": "revise_idea",
+                "idea_id": idea_id,
             }
         )
         return result["session"]
@@ -142,4 +158,5 @@ def create_local_app() -> FastAPI:
         stream_message=stream_message,
         stream_ideas=stream_ideas,
         stream_blueprint=stream_blueprint,
+        process_idea_revision=process_idea_revision,
     )

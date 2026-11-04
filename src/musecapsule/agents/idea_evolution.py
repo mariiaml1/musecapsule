@@ -55,6 +55,17 @@ class IdeaGenerationResponse(BaseModel):
     )
 
 
+class IdeaRevisionResponse(BaseModel):
+    """One revised idea proposed by the model, awaiting source validation.
+
+    Application code assigns the new ID and previous-version reference.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    idea: ProposedProductIdea
+
+
 class IdeaGenerationResult(BaseModel):
     """Validated ideas and the new hypotheses required by their references."""
 
@@ -69,15 +80,27 @@ def parse_product_ideas(
     hypotheses: list[Hypothesis],
     messages: list[Message],
 ) -> IdeaGenerationResult:
-    """Validate idea foundations and assign IDs to new interpretations.
-
-    Return the complete batch without changing session state.
-
-    Raises:
-        ValueError: If an idea has no meaning foundation or sources are invalid.
-    """
+    """Parse an idea batch and validate all meaning foundations."""
 
     parsed = IdeaGenerationResponse.model_validate_json(raw_response)
+
+    return _validate_product_ideas(
+        parsed.ideas,
+        images=images,
+        hypotheses=hypotheses,
+        messages=messages,
+    )
+
+
+def _validate_product_ideas(
+    proposals: list[ProposedProductIdea],
+    *,
+    images: list[ImageFragment],
+    hypotheses: list[Hypothesis],
+    messages: list[Message],
+) -> IdeaGenerationResult:
+    """Validate proposal sources and assign application-controlled IDs."""
+
     existing_image_ids = {image.id for image in images}
     hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in hypotheses}
     messages_by_id = {message.id: message for message in messages}
@@ -85,7 +108,7 @@ def parse_product_ideas(
     ideas: list[ProductIdea] = []
     new_hypotheses: list[Hypothesis] = []
 
-    for proposal in parsed.ideas:
+    for proposal in proposals:
         idea_image_ids = list(proposal.image_ids)
 
         for image_id in proposal.image_ids:
@@ -192,5 +215,86 @@ def generate_product_ideas(
         raw_response,
         images=images,
         hypotheses=active_hypotheses,
+        messages=messages,
+    )
+
+
+def parse_idea_revision(
+    raw_response: str,
+    *,
+    previous_idea: ProductIdea,
+    images: list[ImageFragment],
+    hypotheses: list[Hypothesis],
+    messages: list[Message],
+) -> IdeaGenerationResult:
+    """Validate one revised idea and bind it to its previous version.
+
+    Preserve the previous idea. Return new hypotheses for separate storage.
+    This validates provenance, not semantic preservation of the core concept.
+    """
+    parsed = IdeaRevisionResponse.model_validate_json(raw_response)
+
+    result = _validate_product_ideas(
+        [parsed.idea],
+        images=images,
+        hypotheses=hypotheses,
+        messages=messages,
+    )
+    validated = result.ideas[0]
+
+    revised = ProductIdea(
+        id=validated.id,
+        title=validated.title,
+        description=validated.description,
+        goal_alignment=validated.goal_alignment,
+        image_ids=validated.image_ids,
+        hypothesis_ids=validated.hypothesis_ids,
+        previous_idea_id=previous_idea.id,
+    )
+
+    return IdeaGenerationResult(
+        ideas=[revised],
+        new_hypotheses=result.new_hypotheses,
+    )
+
+
+def revise_product_idea(
+    previous_idea: ProductIdea,
+    intent: Intent,
+    *,
+    messages: list[Message],
+    images: list[ImageFragment],
+    hypotheses: list[Hypothesis],
+    generate: Callable[[str], str],
+) -> IdeaGenerationResult:
+    """Propose one revised idea using the current narrative and foundations.
+
+    Include inactive hypotheses as historical context, never as valid
+    foundations for the new version. Validate the response separately.
+    Do not change session state or select the revised idea.
+    """
+    if not images:
+        raise ValueError("At least one image is required to revise an idea.")
+
+    context = json.dumps(
+        {
+            "intent": intent.model_dump(mode="json"),
+            "previous_idea": previous_idea.model_dump(mode="json"),
+            "messages": [message.model_dump(mode="json") for message in messages],
+            "images": [image.model_dump(mode="json") for image in images],
+            "hypotheses": [
+                hypothesis.model_dump(mode="json") for hypothesis in hypotheses
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    raw_response = generate(context)
+
+    return parse_idea_revision(
+        raw_response,
+        previous_idea=previous_idea,
+        images=images,
+        hypotheses=hypotheses,
         messages=messages,
     )

@@ -88,6 +88,10 @@ class ProductIdea(BaseModel):
     goal_alignment: str = Field(min_length=1)
     image_ids: list[UUID] = Field(min_length=1)
     hypothesis_ids: list[UUID] = Field(default_factory=list)
+    previous_idea_id: UUID | None = Field(
+        default=None,
+        description="The source idea ID when this idea is a revised version.",
+    )
 
 
 class MetaphorOrigin(BaseModel):

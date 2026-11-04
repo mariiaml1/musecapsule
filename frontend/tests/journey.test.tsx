@@ -11,11 +11,29 @@ import {
 import App from "../src/App";
 import * as api from "../src/api";
 import type { Session } from "../src/types";
-vi.mock("../src/api");
+
+vi.mock("../src/api", async () => {
+  const actual = await vi.importActual<typeof import("../src/api")>(
+    "../src/api",
+  );
+
+  return {
+    ...actual,
+    createSession: vi.fn(),
+    loadSession: vi.fn(),
+    streamMessage: vi.fn(),
+    streamIdeas: vi.fn(),
+    streamBlueprint: vi.fn(),
+    selectIdea: vi.fn(),
+    reviseIdea: vi.fn(),
+  };
+});
+
 // The graph's third-party canvas is covered by existing observed-transition tests.
 vi.mock("../src/AgentFlow", () => ({
   AgentFlow: () => <div>Observed graph</div>,
 }));
+
 const fixture: Session = {
   id: "session-1",
   revision: 7,
@@ -73,7 +91,53 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
 describe("creative journey", () => {
-    it.each(["unsupported", "superseded", "missing"] as const)(
+  it("adds a revised idea without changing selection or building a blueprint", async () => {
+    const session = structuredClone(fixture);
+    session.selected_idea_id = "idea-1";
+
+    await restore(session);
+    navigate("Ideas");
+
+    const revisedSession = structuredClone(session);
+    revisedSession.revision += 1;
+    revisedSession.ideas.push({
+      ...session.ideas[0],
+      id: "idea-2",
+      title: "Revised idea capsule",
+      previous_idea_id: "idea-1",
+    });
+
+    vi.mocked(api.reviseIdea).mockResolvedValue(revisedSession);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Revise Idea capsule" }),
+    );
+
+    await screen.findByRole("heading", {
+      name: "Revised idea capsule",
+    });
+
+    expect(api.reviseIdea).toHaveBeenCalledTimes(1);
+    expect(api.reviseIdea).toHaveBeenCalledWith("session-1", "idea-1");
+    expect(screen.getByText("Revised from: Idea capsule")).toBeTruthy();
+
+    const originalHeading = screen.getByRole("heading", {
+      name: "Idea capsule",
+      exact: true,
+    });
+    const originalCard = originalHeading.closest("article");
+    expect(originalCard).not.toBeNull();
+
+    expect(
+      within(originalCard!).getByRole("button", { name: "Selected ✓" }),
+    ).toBeTruthy();
+
+    expect(api.selectIdea).not.toHaveBeenCalled();
+    expect(api.streamBlueprint).not.toHaveBeenCalled();
+    expect(api.streamIdeas).not.toHaveBeenCalled();
+  });
+
+  it.each(["unsupported", "superseded", "missing"] as const)(
     "blocks blueprint generation for a %s foundation and preserves the saved brief",
     async (status) => {
       const session = structuredClone(fixture);
@@ -117,8 +181,8 @@ describe("creative journey", () => {
       expect(buildButton.hasAttribute("disabled")).toBe(true);
       expect(screen.getByText("Previously saved blueprint")).toBeTruthy();
       expect(screen.getByRole("status", {
-            name: "Blueprint foundation warning",
-            }).textContent,).toContain(
+        name: "Blueprint foundation warning",
+      }).textContent,).toContain(
         "This idea has a missing or inactive interpretation.",
       );
 
@@ -135,7 +199,7 @@ describe("creative journey", () => {
       expect(api.streamIdeas).not.toHaveBeenCalled();
     },
   );
-  
+
   it("creates a session then replaces the form with a goal summary", async () => {
     vi.mocked(api.createSession).mockResolvedValue({
       ...fixture,
@@ -333,5 +397,114 @@ describe("creative journey", () => {
       ),
     );
     expect(screen.getByText("Workflow result saved.")).toBeTruthy();
+  });
+
+  it("preserves the selected idea and narrative draft when revision fails", async () => {
+    const session = structuredClone(fixture);
+    session.selected_idea_id = "idea-1";
+
+    await restore(session);
+    navigate("Imagination");
+
+    fireEvent.change(
+      screen.getByLabelText("Your imagined scene or next detail"),
+      { target: { value: "My unsent narrative detail" } },
+    );
+
+    navigate("Ideas");
+
+    vi.mocked(api.reviseIdea).mockRejectedValue(
+      new Error("Generation could not be completed."),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Revise Idea capsule" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain(
+      "Generation could not be completed.",
+    );
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Revise Idea capsule" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    });
+
+    expect(screen.getByRole("button", { name: "Selected ✓" })).toBeTruthy();
+    expect(screen.getByText("Revision 7")).toBeTruthy();
+    expect(api.reviseIdea).toHaveBeenCalledTimes(1);
+    expect(api.selectIdea).not.toHaveBeenCalled();
+    expect(api.streamBlueprint).not.toHaveBeenCalled();
+
+    navigate("Imagination");
+
+    expect(
+      (
+        screen.getByLabelText(
+          "Your imagined scene or next detail",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("My unsent narrative detail");
+  });
+
+  it("reloads a revision conflict without retrying or losing the draft", async () => {
+    const session = structuredClone(fixture);
+    session.selected_idea_id = "idea-1";
+
+    await restore(session);
+    navigate("Imagination");
+
+    fireEvent.change(
+      screen.getByLabelText("Your imagined scene or next detail"),
+      { target: { value: "My unsent clarification" } },
+    );
+
+    navigate("Ideas");
+
+    const latest = structuredClone(session);
+    latest.revision = 11;
+
+    vi.mocked(api.loadSession).mockResolvedValue(latest);
+    vi.mocked(api.reviseIdea).mockRejectedValue(
+      new api.ApiError(409, "Session changed during processing."),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Revise Idea capsule" }),
+    );
+
+    await screen.findByText("Revision 11");
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Session changed during processing.",
+    );
+    expect(api.loadSession).toHaveBeenCalledTimes(2);
+    expect(api.loadSession).toHaveBeenLastCalledWith("session-1");
+    expect(api.reviseIdea).toHaveBeenCalledTimes(1);
+    expect(api.selectIdea).not.toHaveBeenCalled();
+    expect(api.streamBlueprint).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Selected ✓" })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Revise Idea capsule" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    });
+
+    navigate("Imagination");
+
+    expect(
+      (
+        screen.getByLabelText(
+          "Your imagined scene or next detail",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("My unsent clarification");
   });
 });

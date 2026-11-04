@@ -6,12 +6,14 @@ export function IdeasView({
   onGenerate,
   onSelect,
   onBlueprint,
+  onRevise,
 }: {
   session: Session;
   loading: boolean;
   onGenerate: () => void;
   onSelect: (id: string) => Promise<void>;
   onBlueprint: () => void;
+  onRevise: (id: string) => Promise<void>;
 }) {
   return (
     <section className="panel">
@@ -41,6 +43,9 @@ export function IdeasView({
         {" "}
         {session.ideas.map((idea) => {
           const selected = session.selected_idea_id === idea.id;
+          const previousIdea = session.ideas.find(
+            (item) => item.id === idea.previous_idea_id,
+          );
 
           return (
             <article
@@ -48,6 +53,11 @@ export function IdeasView({
               className={`idea-card ${selected ? "selected" : ""}`}
             >
               <h3>{idea.title}</h3>
+              {idea.previous_idea_id && (
+                <p className="muted">
+                  Revised from: {previousIdea?.title ?? "Unavailable idea"}
+                </p>
+              )}
               <p>{idea.description}</p>
 
               <p className="muted">{idea.goal_alignment}</p>
@@ -75,6 +85,14 @@ export function IdeasView({
                 onClick={() => void onSelect(idea.id)}
               >
                 {selected ? "Selected ✓" : "Choose this idea"}
+              </button>
+              <button
+                className="secondary"
+                disabled={loading}
+                aria-label={`Revise ${idea.title}`}
+                onClick={() => void onRevise(idea.id)}
+              >
+                Revise this idea
               </button>
             </article>
           );

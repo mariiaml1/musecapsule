@@ -20,11 +20,11 @@ from musecapsule.state import (
     append_image_fragment,
     append_message,
     append_product_ideas,
+    append_revised_product_idea,
     revise_hypothesis_status,
     select_product_idea,
     validate_idea_foundation,
 )
-
 
 def test_append_message_preserves_previous_state():
     state = SessionState(
@@ -1096,3 +1096,131 @@ def test_append_blueprint_rejects_inactive_foundation_without_changing_state(
     assert state.model_dump(mode="json") == before
     assert state.briefs == [brief]
     assert state.ideas == [idea]
+
+
+def test_append_revised_product_idea_preserves_previous_version_and_selection():
+    message = Message(
+        role="user",
+        text="An opaque capsule contains a golden note.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="An opaque capsule",
+    )
+    image = ImageFragment(
+        label="Opaque capsule",
+        evidence=[source],
+    )
+    hypothesis = Hypothesis(
+        statement="An opaque boundary could inspire black-box evaluation.",
+        image_ids=[image.id],
+        evidence=[source],
+    )
+    previous_idea = ProductIdea(
+        title="Capsule Probe",
+        description="Inspect an AI experiment.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[],
+    )
+    revised_idea = ProductIdea(
+        title="Capsule Probe — Behavioral Evaluation",
+        description="Evaluate an AI experiment through observable outputs.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+        previous_idea_id=previous_idea.id,
+    )
+    state = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+        ideas=[previous_idea],
+        selected_idea_id=previous_idea.id,
+        revision=4,
+    )
+    before = state.model_dump(mode="json")
+
+    updated = append_revised_product_idea(state, revised_idea)
+
+    assert updated.ideas == [previous_idea, revised_idea]
+    assert updated.ideas[-1].previous_idea_id == previous_idea.id
+    assert updated.selected_idea_id == previous_idea.id
+    assert updated.revision == 5
+    assert updated.briefs == state.briefs
+    assert updated.messages == state.messages
+    assert updated.hypotheses == state.hypotheses
+    assert state.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize(
+    ("case", "error_message"),
+    [
+        ("missing_previous", "Previous idea does not exist."),
+        ("inactive_hypothesis", "Idea references an inactive hypothesis."),
+        (
+            "dropped_image",
+            "Idea must preserve all images linked to its hypotheses.",
+        ),
+    ],
+)
+def test_append_revised_product_idea_rejects_invalid_references(
+    case,
+    error_message,
+):
+    message = Message(
+        role="user",
+        text="A golden note floats inside an opaque capsule.",
+    )
+    note_source = EvidenceRef(
+        message_id=message.id,
+        quote="A golden note",
+    )
+    capsule_source = EvidenceRef(
+        message_id=message.id,
+        quote="an opaque capsule",
+    )
+    note = ImageFragment(
+        label="Golden note",
+        evidence=[note_source],
+    )
+    capsule = ImageFragment(
+        label="Opaque capsule",
+        evidence=[capsule_source],
+    )
+    hypothesis = Hypothesis(
+        statement="A hidden valuable result could inspire black-box evaluation.",
+        status="unsupported" if case == "inactive_hypothesis" else "proposed",
+        image_ids=[note.id, capsule.id],
+        evidence=[note_source, capsule_source],
+    )
+    previous_idea = ProductIdea(
+        title="Capsule Probe",
+        description="Evaluate a bounded AI experiment.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[note.id, capsule.id],
+        hypothesis_ids=[],
+    )
+    revised_idea = ProductIdea(
+        title="Revised Capsule Probe",
+        description="Evaluate observable outputs of an AI experiment.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=([note.id] if case == "dropped_image" else [note.id, capsule.id]),
+        hypothesis_ids=[hypothesis.id],
+        previous_idea_id=(uuid4() if case == "missing_previous" else previous_idea.id),
+    )
+    state = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[note, capsule],
+        hypotheses=[hypothesis],
+        ideas=[previous_idea],
+        selected_idea_id=previous_idea.id,
+    )
+    before = state.model_dump(mode="json")
+
+    with pytest.raises(ValueError, match=error_message):
+        append_revised_product_idea(state, revised_idea)
+
+    assert state.model_dump(mode="json") == before

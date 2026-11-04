@@ -6,6 +6,8 @@ import {
   selectIdea,
   streamBlueprint,
   streamIdeas,
+  ApiError,
+  reviseIdea,
 } from "./api";
 import type { AgentRunStatus, NodeLifecycleEvent } from "./agent-events";
 import type { Session } from "./types";
@@ -34,6 +36,7 @@ export default function App() {
   const [agentRunStatus, setAgentRunStatus] = useState<AgentRunStatus>("idle");
   const [completedNodes, setCompletedNodes] = useState<string[]>([]);
   const [activeNode, setActiveNode] = useState<string | null>(null);
+  const [revisingIdeaId, setRevisingIdeaId] = useState<string | null>(null);
 
   function handleNodeEvent(event: NodeLifecycleEvent) {
     if (event.event === "node_started") {
@@ -284,6 +287,42 @@ export default function App() {
     }
   }
 
+  async function handleReviseIdea(ideaId: string) {
+    if (!session || loading) return;
+
+    const currentSessionId = session.id;
+
+    setLoading(true);
+    setRevisingIdeaId(ideaId);
+    setError("");
+    setCompletedNodes([]);
+    setActiveNode(null);
+    setAgentRunStatus("idle");
+
+    try {
+      const updated = await reviseIdea(currentSessionId, ideaId);
+      setSession(updated);
+      setStage("ideas");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Idea revision failed.",
+      );
+
+      if (err instanceof ApiError && err.status === 409) {
+        try {
+          setSession(await loadSession(currentSessionId));
+        } catch {
+          setError(
+            "Session changed, but reloading failed. Open the session again.",
+          );
+        }
+      }
+    } finally {
+      setRevisingIdeaId(null);
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -316,13 +355,11 @@ export default function App() {
           {error}
         </p>
       )}
-      {loading && (
-        <p role="status" className="muted">
-          {agentRunStatus === "running"
-            ? "Your imagination is taking shape…"
-            : "Saving or loading your session…"}
-        </p>
-      )}
+      {revisingIdeaId
+        ? "Revising your idea…"
+        : agentRunStatus === "running"
+          ? "Your imagination is taking shape…"
+          : "Saving or loading your session…"}
       {stage === "intention" && (
         <IntentionView
           session={session}
@@ -352,6 +389,7 @@ export default function App() {
           loading={loading}
           onGenerate={handleGenerateIdeas}
           onSelect={handleSelectIdea}
+          onRevise={handleReviseIdea}
           onBlueprint={() => setStage("blueprint")}
         />
       )}

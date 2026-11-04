@@ -58,6 +58,7 @@ def create_app(
     stream_message: MessageStreamHandler | None = None,
     stream_ideas: SessionStreamHandler | None = None,
     stream_blueprint: SessionStreamHandler | None = None,
+    process_idea_revision: Callable[[SessionState, UUID], SessionState] | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -398,5 +399,46 @@ def create_app(
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @app.post(
+        "/sessions/{session_id}/ideas/{idea_id}/revisions",
+        response_model=SessionState,
+    )
+    def create_idea_revision(
+        session_id: UUID,
+        idea_id: UUID,
+    ) -> SessionState:
+        """Create a proposed revision without replacing or selecting the idea."""
+        session = store.load(session_id)
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        if not any(idea.id == idea_id for idea in session.ideas):
+            raise HTTPException(
+                status_code=404,
+                detail="Idea not found in this session.",
+            )
+
+        if not session.images:
+            raise HTTPException(
+                status_code=409,
+                detail="Narrative images are required to revise an idea.",
+            )
+
+        handler = process_idea_revision
+        if handler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Idea revision is not configured.",
+            )
+
+        def operation(current: SessionState) -> SessionState:
+            return handler(current, idea_id)
+
+        return process_and_save(session, operation)
 
     return app

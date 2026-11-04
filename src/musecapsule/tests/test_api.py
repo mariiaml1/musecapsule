@@ -22,6 +22,7 @@ from musecapsule.state import (
     append_blueprint,
     append_message,
     append_product_ideas,
+    append_revised_product_idea,
 )
 from musecapsule.storage import SessionStore
 from musecapsule.workflow import build_exploration_graph
@@ -1459,3 +1460,81 @@ def test_api_rejects_inactive_blueprint_foundation_before_processing(
         restored = client.get(f"/sessions/{session.id}")
         assert restored.status_code == 200
         assert restored.json() == before
+
+
+def test_api_persists_revised_idea_without_changing_selection(tmp_path):
+    database_path = tmp_path / "sessions.db"
+    message = Message(
+        role="user",
+        text="The capsule is opaque.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="The capsule is opaque",
+    )
+    image = ImageFragment(
+        label="Opaque capsule",
+        evidence=[source],
+    )
+    hypothesis = Hypothesis(
+        statement="Opacity could inspire black-box evaluation.",
+        image_ids=[image.id],
+        evidence=[source],
+    )
+    previous_idea = ProductIdea(
+        title="Capsule Probe",
+        description="Inspect an AI experiment.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[],
+    )
+    revised_idea = ProductIdea(
+        title="Capsule Probe — Output Evaluation",
+        description="Evaluate observable AI outputs.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+        previous_idea_id=previous_idea.id,
+    )
+    session = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+        ideas=[previous_idea],
+        selected_idea_id=previous_idea.id,
+        revision=4,
+    )
+    SessionStore(database_path).save(session)
+    calls = []
+
+    def process_revision(current, idea_id):
+        calls.append(idea_id)
+        return append_revised_product_idea(current, revised_idea)
+
+    app = create_app(
+        database_path,
+        process_idea_revision=process_revision,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/sessions/{session.id}/ideas/{previous_idea.id}/revisions"
+        )
+
+        assert response.status_code == 200
+        updated = response.json()
+
+        assert calls == [previous_idea.id]
+        assert updated["revision"] == 5
+        assert updated["selected_idea_id"] == str(previous_idea.id)
+        assert updated["ideas"] == [
+            previous_idea.model_dump(mode="json"),
+            revised_idea.model_dump(mode="json"),
+        ]
+        assert updated["messages"] == session.model_dump(mode="json")["messages"]
+        assert updated["briefs"] == []
+
+        restored = client.get(f"/sessions/{session.id}")
+        assert restored.status_code == 200
+        assert restored.json() == updated

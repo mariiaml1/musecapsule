@@ -13,6 +13,7 @@ from musecapsule.models import (
     MVPBrief,
     Message,
     MetaphorOrigin,
+    ProductIdea,
 )
 
 
@@ -292,3 +293,35 @@ def test_metaphor_origin_does_not_assume_user_confirmation():
 
     assert origin.user_confirmed is False
     assert origin.hypothesis_ids == []
+
+
+def test_product_idea_accepts_saved_data_without_previous_idea_id():
+    saved_data = {
+        "id": str(uuid4()),
+        "title": "Inspectable Capsule",
+        "description": "Inspect a bounded AI workflow.",
+        "goal_alignment": "Demonstrates an AI portfolio project.",
+        "image_ids": [str(uuid4())],
+        "hypothesis_ids": [],
+    }
+
+    idea = ProductIdea.model_validate(saved_data)
+
+    assert idea.previous_idea_id is None
+
+
+def test_product_idea_preserves_previous_version_reference():
+    previous_idea_id = uuid4()
+    idea = ProductIdea(
+        title="Revised Capsule",
+        description="Inspect observable results without assuming visibility.",
+        goal_alignment="Demonstrates an AI portfolio project.",
+        image_ids=[uuid4()],
+        hypothesis_ids=[],
+        previous_idea_id=previous_idea_id,
+    )
+
+    restored = ProductIdea.model_validate_json(idea.model_dump_json())
+
+    assert restored.id == idea.id
+    assert restored.previous_idea_id == previous_idea_id

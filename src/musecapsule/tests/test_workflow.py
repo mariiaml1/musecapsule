@@ -852,3 +852,100 @@ def test_graph_streams_node_start_and_completion():
             {"example_node": {"session": session}},
         ),
     ]
+
+
+def test_exploration_graph_revises_idea_without_changing_selection():
+    message = Message(
+        role="user",
+        text="The capsule is opaque.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="The capsule is opaque",
+    )
+    image = ImageFragment(
+        label="Opaque capsule",
+        evidence=[source],
+    )
+    previous_idea = ProductIdea(
+        title="Capsule Probe",
+        description="Inspect an AI experiment.",
+        goal_alignment="Build an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[],
+    )
+    session = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[image],
+        ideas=[previous_idea],
+        selected_idea_id=previous_idea.id,
+        revision=4,
+    )
+    before = session.model_dump(mode="json")
+    calls: list[str] = []
+
+    def unexpected_generation(_: str) -> str:
+        pytest.fail("Revision must not invoke another generation task.")
+
+    def generate_revision(context: str) -> str:
+        calls.append("revision")
+        assert json.loads(context)["previous_idea"]["id"] == str(previous_idea.id)
+
+        return json.dumps(
+            {
+                "idea": {
+                    "title": "Capsule Probe — Output Evaluation",
+                    "description": "Evaluate observable AI outputs.",
+                    "goal_alignment": "Build an AI portfolio project.",
+                    "image_ids": [str(image.id)],
+                    "hypothesis_ids": [],
+                    "new_hypotheses": [
+                        {
+                            "statement": (
+                                "Opacity could inspire black-box evaluation."
+                            ),
+                            "image_ids": [str(image.id)],
+                            "evidence": [
+                                {
+                                    "message_id": str(message.id),
+                                    "quote": "The capsule is opaque",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            }
+        )
+
+    graph = build_exploration_graph(
+        generate_images=unexpected_generation,
+        generate_hypotheses=unexpected_generation,
+        generate_revisions=unexpected_generation,
+        generate_question=unexpected_generation,
+        generate_ideas=unexpected_generation,
+        generate_architecture=unexpected_generation,
+        generate_idea_revision=generate_revision,
+    )
+
+    result = graph.invoke(
+        {
+            "session": session,
+            "command": "revise_idea",
+            "idea_id": previous_idea.id,
+        }
+    )
+    updated = result["session"]
+    revised = updated.ideas[-1]
+
+    assert calls == ["revision"]
+    assert len(updated.ideas) == 2
+    assert updated.ideas[0] == previous_idea
+    assert revised.id != previous_idea.id
+    assert revised.previous_idea_id == previous_idea.id
+    assert revised.hypothesis_ids == [updated.hypotheses[0].id]
+    assert updated.selected_idea_id == previous_idea.id
+    assert updated.messages == session.messages
+    assert updated.briefs == session.briefs
+    assert updated.revision == session.revision + 2
+    assert session.model_dump(mode="json") == before

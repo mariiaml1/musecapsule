@@ -45,6 +45,8 @@ export interface ProductIdea {
     goal_alignment: string;
     image_ids: string[];
     hypothesis_ids: string[];
+    /** The source idea when this proposal is a revised version. */
+    previous_idea_id?: string | null;
 }
 
 export interface MetaphorOrigin {
