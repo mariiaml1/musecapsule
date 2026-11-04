@@ -77,7 +77,7 @@ async function restore(session = fixture) {
     target: { value: session.id },
   });
   fireEvent.click(screen.getByRole("button", { name: "Open session" }));
-  await screen.findByText(session.intent.goal);
+  await screen.findByText(session.intent.goal, { selector: "strong" });
 }
 function navigate(name: string) {
   fireEvent.click(
