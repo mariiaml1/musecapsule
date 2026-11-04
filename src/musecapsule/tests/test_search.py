@@ -1,7 +1,7 @@
-from unittest.mock import patch
-from uuid import uuid4
 import json
+from unittest.mock import patch
 from urllib.error import HTTPError
+from uuid import uuid4
 
 from musecapsule.search import search_similar_solutions
 

@@ -10,9 +10,9 @@ from musecapsule.models import (
     Hypothesis,
     ImageFragment,
     Intent,
-    MVPBrief,
     Message,
     MetaphorOrigin,
+    MVPBrief,
     ProductIdea,
     ReferenceCitation,
 )

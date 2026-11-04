@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from musecapsule.agent_events import stream_graph_run
+from musecapsule.agent_events import encode_sse, stream_graph_run
 from musecapsule.api import create_app
 from musecapsule.models import (
     EvidenceRef,
@@ -26,7 +26,7 @@ from musecapsule.state import (
 )
 from musecapsule.storage import SessionStore
 from musecapsule.workflow import build_exploration_graph
-from musecapsule.agent_events import encode_sse
+
 
 def test_api_creates_session_and_restores_it_after_reopening(tmp_path):
     database_path = tmp_path / "sessions.db"

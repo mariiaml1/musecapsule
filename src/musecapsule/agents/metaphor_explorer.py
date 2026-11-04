@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from typing import Literal
 from uuid import UUID
 
@@ -6,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from musecapsule.evidence import validate_evidence
 from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
-from collections.abc import Callable
 
 
 class ExtractedImage(BaseModel):

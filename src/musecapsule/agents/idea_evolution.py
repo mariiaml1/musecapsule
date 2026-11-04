@@ -1,5 +1,5 @@
-from collections.abc import Callable
 import json
+from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field

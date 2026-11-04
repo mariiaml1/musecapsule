@@ -1,9 +1,9 @@
 import argparse
-from collections.abc import Callable
 import logging
-from pathlib import Path
 import sqlite3
 import sys
+from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import ValidationError

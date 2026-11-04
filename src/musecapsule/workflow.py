@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Literal, NotRequired, TypedDict
 from uuid import UUID
 
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from musecapsule.agents.idea_architect import generate_blueprint
@@ -29,7 +30,7 @@ from musecapsule.state import (
     select_product_idea,
     validate_idea_foundation,
 )
-from langgraph.config import get_stream_writer
+
 
 class ExplorationState(TypedDict):
     """Workflow input and session data for an exploration command."""

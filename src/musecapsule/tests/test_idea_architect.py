@@ -498,10 +498,6 @@ def test_parse_blueprint_rejects_dropped_origin_hypothesis():
         }
     )
 
-    clarification = Message(
-        role="user",
-        text="The capsule is opaque, not transparent.",
-    )
     received_contexts: list[dict] = []
 
     def generate(context: str) -> str:

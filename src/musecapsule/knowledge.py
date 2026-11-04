@@ -1,10 +1,8 @@
+import re
+from typing import Self
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import Self
-
-from pydantic import model_validator
-import re
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ReferenceDocument(BaseModel):

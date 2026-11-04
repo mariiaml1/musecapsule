@@ -6,6 +6,7 @@ from musecapsule.agent_events import (
 from musecapsule.models import Intent
 from musecapsule.state import SessionState
 
+
 def test_collect_agent_events_preserves_node_order():
     class FakeGraph:
         def stream(self, graph_input, *, stream_mode):

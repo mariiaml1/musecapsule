@@ -5,6 +5,7 @@ from typing import Any
 from musecapsule.state import SessionState
 from musecapsule.storage import SessionConflictError
 
+
 def collect_agent_events(
     graph: Any,
     graph_input: dict,
@@ -91,7 +92,7 @@ def stream_graph_run(
                 ),
             },
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Do not expose prompts, internal state, or exception details.
         yield encode_sse(
             "run_failed",

@@ -1,3 +1,4 @@
+import itertools
 from uuid import UUID, uuid4
 
 import pytest
@@ -76,7 +77,7 @@ def test_chunk_document_preserves_sources_and_overlap():
         assert chunk.session_id == document.session_id
         assert chunk.text == document.text[chunk.start : chunk.end]
 
-    for previous, current in zip(chunks, chunks[1:]):
+    for previous, current in itertools.pairwise(chunks):
         assert previous.text[-2:] == current.text[:2]
 
     assert document.model_dump() == before

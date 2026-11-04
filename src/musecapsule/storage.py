@@ -18,9 +18,11 @@ class SessionStore:
         self.database_path = database_path.expanduser().resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with closing(sqlite3.connect(self.database_path)) as connection:
-            with connection:
-                connection.execute("""
+        with (
+            closing(sqlite3.connect(self.database_path)) as connection,
+            connection,
+        ):
+            connection.execute("""
                     CREATE TABLE IF NOT EXISTS session_snapshots (
                         session_id TEXT NOT NULL,
                         revision INTEGER NOT NULL,
@@ -46,13 +48,15 @@ class SessionStore:
             raise ValueError("The new revision must exceed the expected revision.")
 
         try:
-            with closing(sqlite3.connect(self.database_path)) as connection:
-                with connection:
-                    # Keep the check and insert in one write transaction.
-                    connection.execute("BEGIN IMMEDIATE")
+            with (
+                closing(sqlite3.connect(self.database_path)) as connection,
+                connection,
+            ):
+                # Keep the check and insert in one write transaction.
+                connection.execute("BEGIN IMMEDIATE")
 
-                    if expected_revision is not None:
-                        row = connection.execute(
+                if expected_revision is not None:
+                    row = connection.execute(
                             """
                             SELECT MAX(revision)
                             FROM session_snapshots
@@ -61,12 +65,12 @@ class SessionStore:
                             (str(session.id),),
                         ).fetchone()
 
-                        if row[0] != expected_revision:
-                            raise SessionConflictError(
+                    if row[0] != expected_revision:
+                        raise SessionConflictError(
                                 "Session changed during processing."
                             )
 
-                    connection.execute(
+                connection.execute(
                         """
                         INSERT INTO session_snapshots (
                             session_id, revision, payload

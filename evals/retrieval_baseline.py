@@ -1,13 +1,13 @@
 from uuid import uuid4
 
+from musecapsule.embeddings import create_local_embedder
 from musecapsule.knowledge import (
     ReferenceDocument,
     chunk_document,
     retrieve_chunks,
 )
-
-from musecapsule.embeddings import create_local_embedder
 from musecapsule.retrieval import index_chunks, search_index
+
 
 def main() -> None:
     """Evaluate lexical retrieval on a small synthetic reference corpus."""

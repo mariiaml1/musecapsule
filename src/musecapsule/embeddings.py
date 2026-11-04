@@ -2,8 +2,6 @@ from collections.abc import Callable
 from math import isfinite
 from typing import Any
 
-from fastembed import TextEmbedding
-
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 

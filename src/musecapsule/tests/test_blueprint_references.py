@@ -3,7 +3,10 @@ from uuid import uuid4
 
 import pytest
 
-from musecapsule.agents.idea_architect import generate_blueprint, parse_blueprint_response
+from musecapsule.agents.idea_architect import (
+    generate_blueprint,
+    parse_blueprint_response,
+)
 from musecapsule.knowledge import ReferenceChunk
 from musecapsule.models import (
     EvidenceRef,

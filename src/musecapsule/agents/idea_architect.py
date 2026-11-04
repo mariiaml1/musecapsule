@@ -1,5 +1,5 @@
-from collections.abc import Callable
 import json
+from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,13 +10,14 @@ from musecapsule.models import (
     Hypothesis,
     ImageFragment,
     Intent,
-    MVPBrief,
     Message,
     MetaphorOrigin,
+    MVPBrief,
     ProductIdea,
     ReferenceCitation,
 )
 from musecapsule.state import validate_idea_foundation
+
 
 class ProposedMetaphorOrigin(BaseModel):
     """A proposed interpretation and its connection to product mechanics."""

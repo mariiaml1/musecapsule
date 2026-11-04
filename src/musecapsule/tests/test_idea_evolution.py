@@ -252,7 +252,6 @@ def test_proposed_idea_accepts_new_grounded_hypothesis():
 
 
 def test_parse_product_ideas_preserves_all_images_of_existing_hypothesis():
-    note_image_id = uuid4()
     capsule_image_id = uuid4()
     message = Message(
         role="user",

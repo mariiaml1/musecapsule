@@ -7,9 +7,9 @@ from musecapsule.models import (
     Hypothesis,
     ImageFragment,
     Intent,
-    MVPBrief,
     Message,
     MetaphorOrigin,
+    MVPBrief,
     ProductIdea,
 )
 from musecapsule.state import (
@@ -25,6 +25,7 @@ from musecapsule.state import (
     select_product_idea,
     validate_idea_foundation,
 )
+
 
 def test_append_message_preserves_previous_state():
     state = SessionState(

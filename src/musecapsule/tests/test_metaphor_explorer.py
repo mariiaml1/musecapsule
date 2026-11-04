@@ -16,6 +16,7 @@ from musecapsule.agents.metaphor_explorer import (
 )
 from musecapsule.models import EvidenceRef, Hypothesis, ImageFragment, Intent, Message
 
+
 def test_parse_image_extraction_returns_grounded_images():
     message = Message(
         role="user",

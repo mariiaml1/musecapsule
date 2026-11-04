@@ -10,8 +10,8 @@ from musecapsule.models import (
     HypothesisRevision,
     ImageFragment,
     Intent,
-    MVPBrief,
     Message,
+    MVPBrief,
     ProductIdea,
 )
 

@@ -6,10 +6,10 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from musecapsule.retrieval import SemanticMatch
 from musecapsule.embeddings import EmbeddingInputTooLongError
 from musecapsule.knowledge import ReferenceDocument
 from musecapsule.models import Intent, Message
+from musecapsule.retrieval import SemanticMatch
 from musecapsule.state import (
     IdeaFoundationError,
     SessionState,

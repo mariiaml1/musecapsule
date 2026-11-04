@@ -1,9 +1,8 @@
 import sqlite3
 from contextlib import closing
+from math import hypot, isfinite
 from pathlib import Path
 from uuid import UUID
-
-from math import hypot, isfinite
 
 from musecapsule.knowledge import ReferenceDocument, validate_chunk_source
 from musecapsule.retrieval import EmbeddedChunk
@@ -93,15 +92,17 @@ class KnowledgeStore:
             return
 
         try:
-            with closing(sqlite3.connect(self.database_path)) as connection:
-                with connection:
-                    connection.execute("BEGIN IMMEDIATE")
-                    self._insert_index(
-                        connection,
-                        indexed,
-                        session_id=session_id,
-                        model_name=model_name,
-                    )
+            with (
+                closing(sqlite3.connect(self.database_path)) as connection,
+                connection,
+            ):
+                connection.execute("BEGIN IMMEDIATE")
+                self._insert_index(
+                    connection,
+                    indexed,
+                    session_id=session_id,
+                    model_name=model_name,
+                )
         except sqlite3.IntegrityError as error:
             raise ValueError("Chunk embedding is already stored.") from error
 
@@ -129,35 +130,37 @@ class KnowledgeStore:
             raise ValueError("Index references a different document.")
 
         try:
-            with closing(sqlite3.connect(self.database_path)) as connection:
-                with connection:
-                    connection.execute("BEGIN IMMEDIATE")
+            with (
+                closing(sqlite3.connect(self.database_path)) as connection,
+                connection,
+            ):
+                connection.execute("BEGIN IMMEDIATE")
 
-                    connection.execute(
-                        """
+                connection.execute(
+                    """
                         INSERT INTO reference_documents (
                             document_id, session_id, payload
                         )
                         VALUES (?, ?, ?)
                         """,
-                        (
-                            str(document.id),
-                            str(document.session_id),
-                            document.model_dump_json(),
-                        ),
-                    )
+                    (
+                        str(document.id),
+                        str(document.session_id),
+                        document.model_dump_json(),
+                    ),
+                )
 
-                    self._insert_index(
-                        connection,
-                        indexed,
-                        session_id=document.session_id,
-                        model_name=model_name,
-                    )
+                self._insert_index(
+                    connection,
+                    indexed,
+                    session_id=document.session_id,
+                    model_name=model_name,
+                )
         except sqlite3.IntegrityError as error:
             raise ValueError(
                 "Reference document or chunk embedding is already stored."
             ) from error
-        
+
     def load_index(
         self,
         *,
@@ -189,7 +192,10 @@ class KnowledgeStore:
 
             item = EmbeddedChunk.model_validate_json(payload)
             self._validate_index_item(
-                item, session_id, model_name, dimension,
+                item,
+                session_id,
+                model_name,
+                dimension,
             )
             indexed.append(item)
 
@@ -224,16 +230,18 @@ class KnowledgeStore:
         self.database_path = database_path.expanduser().resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with closing(sqlite3.connect(self.database_path)) as connection:
-            with connection:
-                connection.execute("""
+        with (
+            closing(sqlite3.connect(self.database_path)) as connection,
+            connection,
+        ):
+            connection.execute("""
                     CREATE TABLE IF NOT EXISTS reference_documents (
                         document_id TEXT PRIMARY KEY,
                         session_id TEXT NOT NULL,
                         payload TEXT NOT NULL
                     )
                 """)
-                connection.execute("""
+            connection.execute("""
                     CREATE TABLE IF NOT EXISTS reference_embeddings (
                         chunk_id TEXT NOT NULL,
                         session_id TEXT NOT NULL,
@@ -251,21 +259,23 @@ class KnowledgeStore:
             ValueError: If the document ID is already stored.
         """
         try:
-            with closing(sqlite3.connect(self.database_path)) as connection:
-                with connection:
-                    connection.execute(
-                        """
+            with (
+                closing(sqlite3.connect(self.database_path)) as connection,
+                connection,
+            ):
+                connection.execute(
+                    """
                         INSERT INTO reference_documents (
                             document_id, session_id, payload
                         )
                         VALUES (?, ?, ?)
                         """,
-                        (
-                            str(document.id),
-                            str(document.session_id),
-                            document.model_dump_json(),
-                        ),
-                    )
+                    (
+                        str(document.id),
+                        str(document.session_id),
+                        document.model_dump_json(),
+                    ),
+                )
         except sqlite3.IntegrityError as error:
             raise ValueError(
                 "Reference document already exists."

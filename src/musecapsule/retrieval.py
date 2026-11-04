@@ -1,6 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from math import fsum, hypot, isfinite
-from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel, Field
