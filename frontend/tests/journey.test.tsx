@@ -358,7 +358,7 @@ describe("creative journey", () => {
       { target: { value: "Another note" } },
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Explore imagination" }),
+      screen.getByRole("button", { name: "Continue →" }),
     );
     await screen.findByText(
       "Result unconfirmed. Reopen the session before retrying.",
@@ -372,6 +372,8 @@ describe("creative journey", () => {
       ).value,
     ).toBe("Another note");
     expect(api.loadSession).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Exploring your scene…")).toBeNull();
+    expect(screen.getByRole("button", { name: "Continue →" }).hasAttribute("disabled")).toBe(false);
   });
   it("reloads a conflicting session and retains failed workflow status", async () => {
     await restore();
@@ -509,4 +511,56 @@ describe("creative journey", () => {
       ).value,
     ).toBe("My unsent clarification");
   });
+  it("shows submitted text immediately and uses real node events until persistence is confirmed", async () => {
+    await restore();
+    navigate("Imagination");
+    let node!: Parameters<typeof api.streamMessage>[2];
+    let finish!: (value: Awaited<ReturnType<typeof api.streamMessage>>) => void;
+    vi.mocked(api.streamMessage).mockImplementation((_id, _text, onNode) => {
+      node = onNode;
+      return new Promise((resolve) => { finish = resolve; });
+    });
+    fireEvent.change(screen.getByLabelText("Your imagined scene or next detail"), {
+      target: { value: "The note starts to glow." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue →" }));
+    const exchange = screen.getByRole("region", { name: "Current exploration" });
+    expect(within(exchange).getByText("The note starts to glow.", { selector: "p" })).toBeTruthy();
+    expect(within(exchange).getByText(/Processing/)).toBeTruthy();
+    expect(within(exchange).getByText("Exploring your scene…")).toBeTruthy();
+    expect(within(exchange).queryByText("What happens next?")).toBeNull();
+    expect(screen.getByRole("button", { name: "Continuing…" }).hasAttribute("disabled")).toBe(true);
+    act(() => node({ event: "node_started", data: { node: "explore_images" } }));
+    expect(within(exchange).getByText("Finding images in your words…")).toBeTruthy();
+    act(() => node({ event: "node_completed", data: { node: "explore_images" } }));
+    expect(screen.queryByText("Workflow result saved.")).toBeNull();
+    expect(api.loadSession).toHaveBeenCalledTimes(1);
+    vi.mocked(api.loadSession).mockResolvedValue({ ...fixture, revision: 8, messages: [
+      ...fixture.messages,
+      { id: "m3", role: "user", text: "The note starts to glow." },
+      { id: "m4", role: "assistant", text: "What changes around it?" },
+    ] });
+    await act(async () => finish({ event: "session_completed", data: { session_id: fixture.id, revision: 8 } }));
+    expect(screen.getByText("What changes around it?")).toBeTruthy();
+    expect(screen.queryByText("Exploring your scene…")).toBeNull();
+    expect(screen.getByText("Workflow result saved.")).toBeTruthy();
+    expect((screen.getByLabelText("Your imagined scene or next detail") as HTMLTextAreaElement).value).toBe("");
+    expect(api.streamMessage).toHaveBeenCalledExactlyOnceWith(fixture.id, "The note starts to glow.", expect.any(Function));
+  });
+
+  it("does not label idea generation as exploration of an unsent draft", async () => {
+    await restore();
+    navigate("Imagination");
+    let finish!: (value: Awaited<ReturnType<typeof api.streamIdeas>>) => void;
+    vi.mocked(api.streamIdeas).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    fireEvent.change(screen.getByLabelText("Your imagined scene or next detail"), {
+      target: { value: "An unsent scene" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Generate ideas/ }));
+    expect(screen.queryByText("Exploring your scene…")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continuing…" })).toBeNull();
+    await act(async () => finish({ event: "run_failed", data: { code: "execution_failed", message: "Generation failed" } }));
+    expect((screen.getByLabelText("Your imagined scene or next detail") as HTMLTextAreaElement).value).toBe("An unsent scene");
+  });
+
 });

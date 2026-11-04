@@ -19,6 +19,7 @@ export interface Session extends SessionOverview {
     messages: Message[];
     images: ImageFragment[];
     hypotheses: Hypothesis[];
+    hypothesis_history?: HypothesisRevision[];
     ideas: ProductIdea[];
     selected_idea_id: string | null;
     briefs: MVPBrief[];
@@ -81,4 +82,13 @@ export interface MVPBrief {
 export interface EvidenceRef {
     message_id: string;
     quote: string;
+}
+
+/** Historical status change returned by the session API. */
+export interface HypothesisRevision {
+    previous: Hypothesis;
+    new_status: Hypothesis["status"];
+    reason: string;
+    evidence: EvidenceRef[];
+    session_revision: number;
 }

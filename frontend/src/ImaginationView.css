@@ -1,0 +1,111 @@
+/* Current exploration stays bounded; saved context remains available on demand. */
+.focused-imagination { max-width: 1020px; margin: 0 auto; }
+.imagination-heading, .scene-toolbar, .composer-footer, .ideas-next, .drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.imagination-heading { margin: 30px 0 22px; }
+.imagination-heading h2 { font-size: 30px; margin: 8px 0; letter-spacing: -.7px; }
+.imagination-heading p { margin: 0; }
+.imagination-heading button, .scene-toolbar button, .composer-footer button, .drawer-heading button { margin: 0; flex-shrink: 0; }
+.discovery-toggle { font-size: 13px; }
+.imagination-scene { padding: 28px 32px 24px; box-shadow: 0 14px 60px #0002; }
+.scene-toolbar { padding-bottom: 20px; border-bottom: 1px solid #3b3149; }
+.scene-toolbar .conversation-toggle { border: none; padding: 6px 0; font-size: 12px; }
+.current-exchange { max-height: 46vh; min-height: 180px; overflow-y: auto; overscroll-behavior: contain; padding: 10px 2px; scrollbar-color: #695278 transparent; }
+.scene-narrative { padding: 16px 8px 8px; }
+.scene-narrative p { font-size: 19px; line-height: 1.7; white-space: pre-wrap; margin: 12px 0; }
+.guide-question { background: #2d243c; border: 1px solid #4b395f; border-radius: 16px; padding: 22px 24px; margin: 12px 0 14px; }
+.guide-question p { font-size: 20px; line-height: 1.6; margin: 10px 0 0; white-space: pre-wrap; }
+.scene-welcome { text-align: center; padding: 28px 10px; }
+.scene-symbol { font-size: 30px; color: #bd9bf3; }
+.scene-welcome h3 { font-size: 22px; font-weight: 500; }
+.scene-composer { border-top: 1px solid #3b3149; margin-top: 14px; }
+.scene-composer textarea { min-height: 110px; max-height: 240px; }
+.composer-footer { margin-top: 16px; }
+.composer-footer > span { font-size: 12px; max-width: 340px; }
+.composer-footer button { min-width: 150px; }
+.processing-state small { display: block; margin-top: 10px; }
+.processing-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 12px; background: #c7a6ff; animation: scene-pulse 1.6s ease-in-out infinite; }
+@keyframes scene-pulse { 50% { opacity: .35; } }
+.ideas-next { padding: 22px 4px; }
+.ideas-next h3 { font-size: 15px; font-weight: 500; margin: 0; }
+.ideas-next p { font-size: 12px; max-width: 520px; margin: 8px 0 0; }
+.ideas-next .actions { flex-shrink: 0; }
+.ideas-next button { margin: 0; font-size: 13px; }
+.exploration-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; height: 100dvh; max-height: 100dvh; width: min(480px, 100%); max-width: 100%; box-sizing: border-box; border: 0; border-left: 1px solid #51405e; padding: 28px; color: #f4f1ff; background: #1b1725; overflow-y: auto; overscroll-behavior: contain; box-shadow: -16px 0 60px #0005; }
+.exploration-drawer::backdrop { background: #08061088; }
+.drawer-heading { align-items: flex-start; border-bottom: 1px solid #49374f; padding-bottom: 18px; }
+.drawer-heading h2 { font-size: 23px; margin: 8px 0 0; }
+.drawer-heading button { padding: 9px 12px; }
+.exploration-drawer .sources { border: none; padding: 20px 0 0; background: transparent; }
+.exploration-drawer .sources > .eyebrow, .exploration-drawer .sources > h3 { display: none; }
+.exploration-drawer blockquote { margin: 12px 0; padding-left: 14px; border-left: 2px solid #a787d0; overflow-wrap: anywhere; }
+.exploration-drawer p { white-space: pre-wrap; }
+.previous-meanings { padding-top: 12px; }
+.goal-summary { padding: 12px 20px; }
+.goal-summary strong { font-size: 14px; margin: 5px 0; }
+.goal-summary .idea-sources { margin-top: 8px; }
+@media (max-width: 720px) {
+  .imagination-heading, .ideas-next { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .imagination-heading { margin-top: 20px; }
+  .imagination-scene { padding: 20px 16px; }
+  .scene-toolbar { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .scene-toolbar .eyebrow { font-size: 10px; }
+  .current-exchange { max-height: 42vh; }
+  .scene-narrative p, .guide-question p { font-size: 17px; }
+  .guide-question { padding: 18px; }
+  .composer-footer { align-items: stretch; flex-direction: column; gap: 12px; }
+  .composer-footer button { width: 100%; }
+  .exploration-drawer { padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .processing-dot { animation: none; } }
+
+body:has(.exploration-drawer[open]) { overflow: hidden; }
+
+/* Desktop discoveries share the workspace; compact screens use a modal drawer. */
+.focused-imagination.with-context { max-width: 1240px; }
+.imagination-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
+.with-context .imagination-columns { grid-template-columns: minmax(0, 1fr) minmax(320px, 390px); }
+.imagination-main { min-width: 0; }
+.context-sidebar { position: sticky; top: 20px; padding: 22px; max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-color: #695278 transparent; }
+.creative-context { min-width: 0; }
+.creative-context .drawer-heading { gap: 12px; }
+.creative-context .drawer-heading h2 { font-size: 21px; margin-top: 0; }
+.creative-context .drawer-heading p { font-size: 12px; line-height: 1.6; margin-bottom: 0; }
+.context-section { border-bottom: 1px solid #49374f; padding: 20px 0; }
+.context-section h3 { font-size: 15px; margin: 0 0 16px; }
+.context-section h3 > span { color: #afa0bd; font-weight: 400; }
+.context-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.context-image-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 12px 10px; margin: 0; min-width: 0; border: 1px solid #554361; background: linear-gradient(145deg, #30263f, #211d2d); border-radius: 12px; color: #d4c6e6; overflow-wrap: anywhere; }
+.context-image-card[aria-pressed="true"] { border-color: #caa0f7; box-shadow: 0 0 0 1px #caa0f7; background: linear-gradient(145deg, #49315d, #292235); }
+.image-mark { font-size: 22px; color: #c69aef; margin-bottom: 12px; }
+.image-index { font-size: 8px; letter-spacing: 1px; color: #b4a3c6; margin-bottom: 5px; }
+.context-image-card strong { font-size: 12px; line-height: 1.5; }
+.selected-image-source { padding: 12px 14px; margin-top: 14px; border-radius: 12px; border: 1px solid #554361; background: #34293f; font-size: 13px; }
+.context-quote { overflow-wrap: anywhere; }
+.context-quote blockquote { margin: 6px 0; font-size: 14px; font-style: italic; line-height: 1.65; border: none; padding-left: 0; }
+.context-quote details { margin: 4px 0; }
+.context-quote summary { font-size: 12px; text-decoration: underline; }
+.context-quote p { font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+.meaning-card { border: 1px solid #554361; border-radius: 12px; padding: 12px; background: #2c2438; margin: 10px 0 0; }
+.meaning-card > summary { display: flex; align-items: start; gap: 10px; padding: 0; color: #eee4fa; font-size: 13px; line-height: 1.6; }
+.meaning-card > summary::after { content: "⌄"; color: #c9a9ef; margin-left: auto; }
+.meaning-card[open] > summary::after { content: "⌃"; }
+.meaning-statement { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meaning-card[open] .meaning-statement { -webkit-line-clamp: unset; }
+.meaning-status { font-size: 9px; padding: 2px 7px; border-radius: 20px; color: #ebdafe; background: #59416e; flex-shrink: 0; }
+.meaning-status.unsupported, .meaning-status.superseded { background: #51323e; color: #ffbec8; }
+.meaning-card p { font-size: 12px; line-height: 1.7; }
+.context-earlier { margin: 16px 0 0; }
+.context-earlier > summary { font-weight: 500; font-size: 14px; }
+.context-earlier > .muted { font-size: 12px; }
+.with-context .scene-toolbar { flex-wrap: wrap; gap: 8px; }
+.with-context .ideas-next { flex-wrap: wrap; }
+.with-context .ideas-next .actions { flex-shrink: 1; }
+.with-context .composer-footer > span { max-width: 240px; }
+@media (max-width: 1000px) {
+  .imagination-columns { grid-template-columns: minmax(0, 1fr); }
+  .context-sidebar { display: none; }
+}
+@media (max-width: 380px) {
+  .context-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .meaning-card > summary { flex-wrap: wrap; }
+}

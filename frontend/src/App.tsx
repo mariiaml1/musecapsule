@@ -31,6 +31,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [narrative, setNarrative] = useState("");
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [agentRunStatus, setAgentRunStatus] = useState<AgentRunStatus>("idle");
@@ -148,6 +149,7 @@ export default function App() {
 
     const currentSessionId = session.id;
     const text = narrative;
+    setPendingMessage(text);
 
     setLoading(true);
     setError("");
@@ -200,6 +202,7 @@ export default function App() {
         );
       }
     } finally {
+      setPendingMessage(null);
       setLoading(false);
     }
   }
@@ -359,7 +362,7 @@ export default function App() {
           {error}
         </p>
       )}
-      {loading && (
+      {loading && (!pendingMessage || stage !== "imagination") && (
         <p role="status" className="muted">
           {revisingIdeaId
             ? "Revising your idea…"
@@ -382,6 +385,10 @@ export default function App() {
       )}
       {session && stage === "imagination" && (
         <ImaginationView
+          key={session.id}
+          pendingMessage={pendingMessage}
+          activeNode={activeNode}
+          runStatus={agentRunStatus}
           session={session}
           narrative={narrative}
           onNarrative={setNarrative}
