@@ -6,9 +6,21 @@ from uuid import UUID
 from fastapi import FastAPI
 
 from musecapsule.agent_events import stream_graph_run
-from musecapsule.api import create_app
+from musecapsule.api import (
+    ReferenceIngestionHandler,
+    ReferenceSearchHandler,
+    create_app,
+)
+from musecapsule.embeddings import (
+    EMBEDDING_MODEL_NAME,
+    create_local_embedder,
+)
+from musecapsule.knowledge import ReferenceDocument
+from musecapsule.knowledge_service import ingest_reference_document
+from musecapsule.knowledge_storage import KnowledgeStore
 from musecapsule.llm import request_generation
 from musecapsule.models import Message
+from musecapsule.retrieval import SemanticMatch, search_index
 from musecapsule.state import SessionState
 from musecapsule.workflow import build_exploration_graph
 
@@ -150,6 +162,55 @@ def create_local_app() -> FastAPI:
             save_result,
         )
 
+    reference_handler: ReferenceIngestionHandler | None = None
+
+    reference_search_handler: ReferenceSearchHandler | None = None
+
+    if os.environ.get("MUSECAPSULE_RAG_ENABLED", "0") == "1":
+        embed = create_local_embedder()
+        knowledge_store = KnowledgeStore(database_path)
+
+        def process_reference(
+            session_id: UUID,
+            title: str,
+            text: str,
+        ) -> ReferenceDocument:
+            """Index reference material using the shared local embedder."""
+            return ingest_reference_document(
+                session_id=session_id,
+                title=title,
+                text=text,
+                store=knowledge_store,
+                model_name=EMBEDDING_MODEL_NAME,
+                embed=embed,
+            )
+
+        reference_handler = process_reference
+
+        def search_reference_material(
+            session_id: UUID,
+            query: str,
+            limit: int,
+            min_score: float,
+        ) -> list[SemanticMatch]:
+            """Search saved embeddings using the shared local embedder."""
+            indexed = knowledge_store.load_index(
+                session_id=session_id,
+                model_name=EMBEDDING_MODEL_NAME,
+            )
+
+            return search_index(
+                query,
+                indexed,
+                session_id=session_id,
+                model_name=EMBEDDING_MODEL_NAME,
+                embed=embed,
+                limit=limit,
+                min_score=min_score,
+            )
+
+        reference_search_handler = search_reference_material
+
     return create_app(
         database_path,
         process_message=process_message,
@@ -159,4 +220,6 @@ def create_local_app() -> FastAPI:
         stream_ideas=stream_ideas,
         stream_blueprint=stream_blueprint,
         process_idea_revision=process_idea_revision,
+        process_reference=reference_handler,
+        search_references=reference_search_handler,
     )

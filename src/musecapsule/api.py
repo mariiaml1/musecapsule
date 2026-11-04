@@ -6,6 +6,9 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from musecapsule.retrieval import SemanticMatch
+from musecapsule.embeddings import EmbeddingInputTooLongError
+from musecapsule.knowledge import ReferenceDocument
 from musecapsule.models import Intent, Message
 from musecapsule.state import (
     IdeaFoundationError,
@@ -32,11 +35,52 @@ class CreateMessageRequest(BaseModel):
             raise ValueError("Message text must not be blank.")
         return value
 
-
 class SelectIdeaRequest(BaseModel):
     """The user's explicit selection of an existing product idea."""
 
     idea_id: UUID
+
+
+class CreateReferenceRequest(BaseModel):
+    """Reference material supplied separately from the imagined narrative."""
+
+    title: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+    @field_validator("title", "text")
+    @classmethod
+    def reject_blank_content(cls, value: str) -> str:
+        """Reject blank values while preserving original source text."""
+        if not value.strip():
+            raise ValueError("Reference content must not be blank.")
+        return value
+
+
+class SearchReferencesRequest(BaseModel):
+    """Search reference fragments belonging to the current session."""
+
+    query: str = Field(min_length=1)
+    limit: int = Field(default=3, ge=1, le=10)
+    min_score: float = Field(default=0.30, ge=-1, le=1)
+
+    @field_validator("query")
+    @classmethod
+    def reject_blank_query(cls, value: str) -> str:
+        """Reject blank queries without changing their content."""
+        if not value.strip():
+            raise ValueError("Search query must not be blank.")
+        return value
+
+
+ReferenceSearchHandler = Callable[
+    [UUID, str, int, float],
+    list[SemanticMatch],
+]
+
+ReferenceIngestionHandler = Callable[
+    [UUID, str, str],
+    ReferenceDocument,
+]
 
 MessageStreamHandler = Callable[
     [SessionState, str, Callable[[SessionState], None]],
@@ -59,6 +103,8 @@ def create_app(
     stream_ideas: SessionStreamHandler | None = None,
     stream_blueprint: SessionStreamHandler | None = None,
     process_idea_revision: Callable[[SessionState, UUID], SessionState] | None = None,
+    process_reference: ReferenceIngestionHandler | None = None,
+    search_references: ReferenceSearchHandler | None = None,
 ) -> FastAPI:
     """Create the local API with an explicitly configurable database."""
     store = SessionStore(database_path)
@@ -440,5 +486,84 @@ def create_app(
             return handler(current, idea_id)
 
         return process_and_save(session, operation)
+
+    @app.post(
+        "/sessions/{session_id}/references",
+        response_model=ReferenceDocument,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def create_reference(
+        session_id: UUID,
+        request: CreateReferenceRequest,
+    ) -> ReferenceDocument:
+        """Index reference material without changing the narrative session."""
+        if store.load(session_id) is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        handler = process_reference
+        if handler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Reference ingestion is not configured.",
+            )
+
+        try:
+            return handler(session_id, request.title, request.text)
+        except EmbeddingInputTooLongError as error:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "A reference fragment exceeds the embedding token limit. "
+                    "Submit a shorter text."
+                ),
+            ) from error
+        except RuntimeError as error:
+            raise HTTPException(
+                status_code=502,
+                detail="Reference indexing could not be completed.",
+            ) from error
+
+    @app.post(
+        "/sessions/{session_id}/references/search",
+        response_model=list[SemanticMatch],
+    )
+    def search_session_references(
+        session_id: UUID,
+        request: SearchReferencesRequest,
+    ) -> list[SemanticMatch]:
+        """Return matching source fragments without changing session state."""
+        if store.load(session_id) is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found.",
+            )
+
+        handler = search_references
+        if handler is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Reference search is not configured.",
+            )
+
+        try:
+            return handler(
+                session_id,
+                request.query,
+                request.limit,
+                request.min_score,
+            )
+        except EmbeddingInputTooLongError as error:
+            raise HTTPException(
+                status_code=422,
+                detail="Search query exceeds the embedding token limit.",
+            ) from error
+        except RuntimeError as error:
+            raise HTTPException(
+                status_code=502,
+                detail="Reference search could not be completed.",
+            ) from error
 
     return app

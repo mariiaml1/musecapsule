@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 rag = [
     "fastembed==0.9.1",
+    "tokenizers==0.23.3",
 ]
 dev = [
     "pytest==9.1.1",
