@@ -1,0 +1,348 @@
+.blueprint-workspace {
+  min-width: 0;
+  padding: 8px 0 32px;
+}
+.blueprint-workspace * {
+  box-sizing: border-box;
+}
+.bp-hero {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  padding: 28px 0 32px;
+}
+.bp-hero > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.bp-hero h2 {
+  font-size: 14px;
+  font-weight: 500;
+  color: #c8b8df;
+  margin: 12px 0;
+}
+.bp-hero h3 {
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.2;
+  letter-spacing: -1px;
+  margin: 0 0 18px;
+}
+.bp-summary {
+  color: #cec3db;
+  line-height: 1.75;
+  font-size: 15px;
+  white-space: pre-wrap;
+}
+.bp-hero-actions {
+  flex: 0 0 230px;
+}
+.bp-hero-actions button {
+  width: 100%;
+  margin: 0;
+  font-size: 13px;
+}
+.bp-hero-actions p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.bp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.bp-badges > span {
+  border: 1px solid #61516f;
+  background: #30263f;
+  border-radius: 20px;
+  padding: 6px 12px;
+  color: #dcc7f6;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.bp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(300px, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.bp-main,
+.bp-sidebar {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.bp-card {
+  border: 1px solid #47394f;
+  border-radius: 18px;
+  padding: 26px;
+  background: linear-gradient(135deg, #24202f, #1b1825);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bp-card > .eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+}
+.bp-card h3 {
+  margin: 12px 0 20px;
+  font-size: 21px;
+  letter-spacing: -0.4px;
+  line-height: 1.3;
+}
+.bp-card h4 {
+  font-size: 13px;
+  color: #dbc5f0;
+  margin: 24px 0 8px;
+}
+.bp-card p,
+.bp-card li,
+.bp-card dd {
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.bp-card .muted {
+  color: #bcb0ca;
+  font-size: 12px;
+}
+.bp-experience {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.bp-experience dt {
+  color: #c8aedf;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.bp-experience dd {
+  margin: 0;
+}
+.bp-scenario {
+  grid-column: 1 / -1;
+  border-top: 1px solid #4c3d58;
+  padding-top: 22px;
+}
+.bp-features {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.bp-features li {
+  display: flex;
+  gap: 18px;
+  align-items: start;
+  padding: 18px 0;
+  border-top: 1px solid #45374f;
+}
+.bp-features li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.bp-features li:last-child {
+  padding-bottom: 0;
+}
+.bp-features li > span {
+  flex: 0 0 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #d6b8f5;
+  border: 1px solid #6b4d83;
+  background: #352741;
+  border-radius: 9px;
+  font-size: 11px;
+}
+.bp-features p {
+  margin: 2px 0 0;
+}
+.bp-components {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.bp-component {
+  background: #2c2537;
+  border: 1px solid #51415e;
+  padding: 18px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.bp-component-number {
+  font-size: 11px;
+  color: #baa1d5;
+}
+.bp-component h4 {
+  margin: 10px 0;
+  color: #f3eafa;
+  font-size: 15px;
+}
+.bp-component p {
+  font-size: 13px;
+}
+.bp-component .bp-technology {
+  border-top: 1px solid #51415e;
+  padding-top: 12px;
+  margin-bottom: 0;
+  color: #cfb4e7;
+  font-size: 12px;
+}
+.bp-criteria {
+  padding-left: 20px;
+  margin-bottom: 0;
+}
+.bp-criteria li {
+  padding: 8px 0 8px 6px;
+}
+.bp-criteria li::marker {
+  color: #b38ee1;
+}
+.bp-sidebar .bp-card {
+  padding: 22px;
+}
+.bp-sidebar h3 {
+  font-size: 18px;
+}
+.bp-sidebar p,
+.bp-sidebar li {
+  font-size: 13px;
+}
+.bp-meaning-note {
+  padding: 12px 14px;
+  border-left: 2px solid #b996e3;
+  background: #30253e;
+  color: #d9c4ed;
+}
+.bp-card details {
+  border-top: 1px solid #4c3c57;
+  margin-top: 16px;
+  padding-top: 8px;
+}
+.bp-card summary {
+  line-height: 1.6;
+}
+.bp-add-material > summary {
+  border: 1px solid #806196;
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+.bp-add-material fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.bp-add-material legend {
+  font-size: 12px;
+  margin-bottom: 10px;
+  color: #c4b1d5;
+}
+.bp-add-material input,
+.bp-add-material textarea {
+  width: 100%;
+  min-width: 0;
+}
+.bp-add-material label {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.bp-add-material button {
+  width: 100%;
+}
+.bp-references {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+.bp-references > li {
+  background: #302639;
+  border: 1px solid #584363;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 12px;
+}
+.bp-references blockquote {
+  margin: 14px 0;
+  padding-left: 12px;
+  border-left: 2px solid #b894dc;
+}
+.bp-references details p {
+  font-size: 11px;
+}
+.bp-risks details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.bp-risks summary {
+  font-size: 16px;
+  color: #ebd4ad;
+  font-weight: 600;
+}
+.bp-risks ul {
+  padding-left: 18px;
+}
+.bp-risks li + li {
+  margin-top: 12px;
+}
+.bp-warning {
+  border: 1px solid #95704e;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  background: #352a25;
+  color: #f3d7b2;
+}
+.bp-warning p {
+  line-height: 1.7;
+  font-size: 14px;
+  margin-top: 0;
+}
+.bp-empty {
+  padding: 60px 32px;
+  text-align: center;
+}
+.bp-empty > span {
+  color: #c0a0ed;
+  font-size: 42px;
+}
+.blueprint-workspace :focus-visible {
+  outline: 2px solid #d5b7ff;
+  outline-offset: 4px;
+}
+@media (max-width: 1000px) {
+  .bp-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bp-hero {
+    align-items: flex-start;
+  }
+}
+@media (max-width: 600px) {
+  .bp-hero {
+    flex-direction: column;
+    gap: 18px;
+  }
+  .bp-hero-actions {
+    flex-basis: auto;
+    width: 100%;
+  }
+  .bp-components,
+  .bp-experience {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bp-card,
+  .bp-sidebar .bp-card {
+    padding: 20px;
+  }
+  .bp-layout,
+  .bp-main,
+  .bp-sidebar {
+    gap: 16px;
+  }
+}
