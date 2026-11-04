@@ -1,5 +1,6 @@
 import type { Session } from "./types";
 import { IdeaOrigin } from "./IdeaOrigin";
+import { ReferenceForm } from "./ReferenceForm";
 export function BlueprintView({
   session,
   loading,
@@ -19,23 +20,25 @@ export function BlueprintView({
     .filter((b) => b.idea_id === session.selected_idea_id)
     .at(-1);
 
-  const foundationBlocked = selectedIdea?.hypothesis_ids.some(
-    (hypothesisId) => {
+  const foundationBlocked =
+    selectedIdea?.hypothesis_ids.some((hypothesisId) => {
       const hypothesis = session.hypotheses.find(
         (item) => item.id === hypothesisId,
       );
 
       return (
-        !hypothesis ||
-        !["proposed", "supported"].includes(hypothesis.status)
+        !hypothesis || !["proposed", "supported"].includes(hypothesis.status)
       );
-    },
-  ) ?? false;
+    }) ?? false;
 
   return (
     <section className="panel blueprint-panel">
       <span className="eyebrow">FROM IDEA TO IMPLEMENTATION</span>
       <h2>Engineering Blueprint</h2>
+      <details>
+        <summary>Add supporting material</summary>
+        <ReferenceForm key={session.id} sessionId={session.id} />
+      </details>
       {!selectedIdea ? (
         <div className="empty-state">
           <p>Choose an idea to develop into an engineering plan.</p>

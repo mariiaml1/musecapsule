@@ -90,6 +90,20 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
 describe("creative journey", () => {
+  it("offers reference ingestion before an idea is selected", async () => {
+    await restore();
+    navigate("Blueprint");
+
+    fireEvent.click(screen.getByText("Add supporting material"));
+
+    expect(
+      screen.getByRole("region", { name: "Add reference material" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Reference title")).toBeTruthy();
+    expect(screen.getByLabelText("Reference text")).toBeTruthy();
+
+    expect(api.streamBlueprint).not.toHaveBeenCalled();
+  });
   it.each(["missing", "empty", "cited"] as const)(
     "renders blueprint references for the %s case without generation",
     async (referenceState) => {
