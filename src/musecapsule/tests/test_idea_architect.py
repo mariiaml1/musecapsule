@@ -17,6 +17,7 @@ from musecapsule.models import (
     Message,
     ProductIdea,
 )
+from musecapsule.state import IdeaFoundationError
 
 
 def test_proposed_origin_rejects_model_assigned_confirmation():
@@ -598,3 +599,50 @@ def test_parse_blueprint_preserves_suggested_architecture():
     assert storage.name == "Result storage"
     assert storage.responsibility == "Save results for later inspection."
     assert storage.suggested_technology is None
+
+
+@pytest.mark.parametrize("status", ["unsupported", "superseded"])
+def test_generate_blueprint_rejects_inactive_foundation_before_generation(
+    status,
+):
+    message = Message(
+        role="user",
+        text="A transparent capsule contains a golden note.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A transparent capsule",
+    )
+    image = ImageFragment(
+        label="Transparent capsule",
+        evidence=[source],
+    )
+    hypothesis = Hypothesis(
+        statement="Transparency could inspire inspectable execution.",
+        status=status,
+        image_ids=[image.id],
+        evidence=[source],
+    )
+    idea = ProductIdea(
+        title="Inspectable Capsule",
+        description="Inspect the results of a bounded AI workflow.",
+        goal_alignment="Demonstrates an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+    )
+
+    def unexpected_generation(_: str) -> str:
+        pytest.fail("An inactive foundation must be rejected before generation.")
+
+    with pytest.raises(
+        IdeaFoundationError,
+        match="Idea references an inactive hypothesis",
+    ):
+        generate_blueprint(
+            idea,
+            Intent(goal="Build an AI portfolio project"),
+            messages=[message],
+            images=[image],
+            hypotheses=[hypothesis],
+            generate=unexpected_generation,
+        )

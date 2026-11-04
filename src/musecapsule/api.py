@@ -7,7 +7,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from musecapsule.models import Intent, Message
-from musecapsule.state import SessionState, select_product_idea
+from musecapsule.state import (
+    IdeaFoundationError,
+    SessionState,
+    select_product_idea,
+    validate_idea_foundation,
+)
 from musecapsule.storage import SessionConflictError, SessionStore
 
 
@@ -101,6 +106,35 @@ def create_app(
             ) from error
 
         return updated
+
+    def validate_blueprint_request(session: SessionState) -> None:
+        """Reject an invalid idea foundation before processing or streaming."""
+        if session.selected_idea_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Select an idea before requesting a blueprint.",
+            )
+
+        idea = next(
+            (item for item in session.ideas if item.id == session.selected_idea_id),
+            None,
+        )
+        if idea is None:
+            raise HTTPException(
+                status_code=409,
+                detail="The selected idea is missing from this session.",
+            )
+
+        try:
+            validate_idea_foundation(idea, session.hypotheses)
+        except IdeaFoundationError as error:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The selected idea has a missing or inactive interpretation. "
+                    "Generate and select a new idea before building a blueprint."
+                ),
+            ) from error
 
     @app.post(
         "/sessions",
@@ -308,11 +342,7 @@ def create_app(
                 detail="Session not found.",
             )
 
-        if session.selected_idea_id is None:
-            raise HTTPException(
-                status_code=409,
-                detail="Select an idea before requesting a blueprint.",
-            )
+        validate_blueprint_request(session)
 
         if not any(idea.id == session.selected_idea_id for idea in session.ideas):
             raise HTTPException(
@@ -339,11 +369,7 @@ def create_app(
                 detail="Session not found.",
             )
 
-        if session.selected_idea_id is None:
-            raise HTTPException(
-                status_code=409,
-                detail="Select an idea before requesting a blueprint.",
-            )
+        validate_blueprint_request(session)
 
         if not any(idea.id == session.selected_idea_id for idea in session.ideas):
             raise HTTPException(

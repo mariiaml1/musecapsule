@@ -1387,3 +1387,75 @@ def test_api_rejects_blueprint_stream_without_selection(tmp_path):
         restored = client.get(f"/sessions/{created['id']}")
         assert restored.status_code == 200
         assert restored.json() == created
+
+
+@pytest.mark.parametrize("endpoint", ["briefs", "briefs/stream"])
+@pytest.mark.parametrize("status", ["unsupported", "superseded"])
+def test_api_rejects_inactive_blueprint_foundation_before_processing(
+    tmp_path,
+    endpoint,
+    status,
+):
+    database_path = tmp_path / "sessions.db"
+    message = Message(
+        role="user",
+        text="A transparent capsule contains a golden note.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A transparent capsule",
+    )
+    image = ImageFragment(
+        label="Transparent capsule",
+        evidence=[source],
+    )
+    hypothesis = Hypothesis(
+        statement="Transparency could inspire inspectable execution.",
+        status=status,
+        image_ids=[image.id],
+        evidence=[source],
+    )
+    idea = ProductIdea(
+        title="Inspectable Capsule",
+        description="Inspect the results of a bounded AI workflow.",
+        goal_alignment="Demonstrates an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+    )
+    session = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+        ideas=[idea],
+        selected_idea_id=idea.id,
+        revision=3,
+    )
+    store = SessionStore(database_path)
+    store.save(session)
+    before = session.model_dump(mode="json")
+
+    def unexpected_processing(current):
+        pytest.fail("An invalid foundation must be rejected before processing.")
+
+    def unexpected_streaming(current, save_result):
+        pytest.fail("An invalid foundation must be rejected before streaming.")
+
+    app = create_app(
+        database_path,
+        process_blueprint=unexpected_processing,
+        stream_blueprint=unexpected_streaming,
+    )
+
+    with TestClient(app) as client:
+        response = client.post(f"/sessions/{session.id}/{endpoint}")
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "The selected idea has a missing or inactive interpretation. "
+            "Generate and select a new idea before building a blueprint."
+        )
+
+        restored = client.get(f"/sessions/{session.id}")
+        assert restored.status_code == 200
+        assert restored.json() == before

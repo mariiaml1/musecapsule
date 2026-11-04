@@ -73,6 +73,69 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
 describe("creative journey", () => {
+    it.each(["unsupported", "superseded", "missing"] as const)(
+    "blocks blueprint generation for a %s foundation and preserves the saved brief",
+    async (status) => {
+      const session = structuredClone(fixture);
+      session.selected_idea_id = "idea-1";
+
+      if (status === "missing") {
+        session.hypotheses = [];
+      } else {
+        session.hypotheses[0].status = status;
+      }
+
+      session.briefs = [
+        {
+          idea_id: "idea-1",
+          idea_summary: "Previously saved blueprint",
+          problem: "Losing ideas",
+          audience: "Creators",
+          core_scenario: "Store a note",
+          features: ["Save a note"],
+          constraints: ["Solo development"],
+          risks: ["Interpretations may change"],
+          acceptance_criteria: ["A saved note can be reopened"],
+          suggested_architecture: [],
+          metaphor_origin: {
+            image_ids: ["image-1"],
+            hypothesis_ids: ["h1"],
+            meaning_basis: "A possible interpretation",
+            mechanic_mapping: "Note becomes artifact",
+            user_confirmed: false,
+          },
+        },
+      ];
+
+      await restore(session);
+      navigate("Blueprint");
+
+      const buildButton = screen.getByRole("button", {
+        name: "Generate another blueprint",
+      });
+
+      expect(buildButton.hasAttribute("disabled")).toBe(true);
+      expect(screen.getByText("Previously saved blueprint")).toBeTruthy();
+      expect(screen.getByRole("status", {
+            name: "Blueprint foundation warning",
+            }).textContent,).toContain(
+        "This idea has a missing or inactive interpretation.",
+      );
+
+      fireEvent.click(buildButton);
+      expect(api.streamBlueprint).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Review ideas" }),
+      );
+
+      expect(
+        screen.getByRole("heading", { name: "Ideas", exact: true }),
+      ).toBeTruthy();
+      expect(api.streamIdeas).not.toHaveBeenCalled();
+    },
+  );
+  
   it("creates a session then replaces the form with a goal summary", async () => {
     vi.mocked(api.createSession).mockResolvedValue({
       ...fixture,
@@ -82,22 +145,31 @@ describe("creative journey", () => {
       hypotheses: [],
     });
     render(<App />);
+
     expect(
       within(screen.getByRole("navigation"))
         .getByRole("button", { name: /Imagination/ })
         .hasAttribute("disabled"),
     ).toBe(true);
+
     fireEvent.change(screen.getByLabelText("Your goal"), {
       target: { value: "Build a creative tool" },
     });
+
     fireEvent.click(screen.getByRole("button", { name: /Begin exploration/ }));
+
     await screen.findByRole("heading", { name: "Imagination", exact: true });
+
     expect(screen.queryByLabelText("Your goal")).toBeNull();
+
     navigate("Intention");
+
     expect(
       screen.queryByRole("button", { name: /Begin exploration/ }),
     ).toBeNull();
+
     expect(api.createSession).toHaveBeenCalledTimes(1);
+
   });
   it("restores and navigates without generation or loss of draft or revision", async () => {
     await restore();

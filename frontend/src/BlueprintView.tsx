@@ -14,9 +14,24 @@ export function BlueprintView({
   const selectedIdea = session.ideas.find(
     (i) => i.id === session.selected_idea_id,
   );
+
   const selectedBrief = session.briefs
     .filter((b) => b.idea_id === session.selected_idea_id)
     .at(-1);
+
+  const foundationBlocked = selectedIdea?.hypothesis_ids.some(
+    (hypothesisId) => {
+      const hypothesis = session.hypotheses.find(
+        (item) => item.id === hypothesisId,
+      );
+
+      return (
+        !hypothesis ||
+        !["proposed", "supported"].includes(hypothesis.status)
+      );
+    },
+  ) ?? false;
+
   return (
     <section className="panel blueprint-panel">
       <span className="eyebrow">FROM IDEA TO IMPLEMENTATION</span>
@@ -30,9 +45,24 @@ export function BlueprintView({
         <>
           <h3>{selectedIdea.title}</h3>
           <p>{selectedIdea.description}</p>
-          <button onClick={onBuild} disabled={loading}>
+          <button
+            onClick={onBuild}
+            disabled={loading || foundationBlocked}
+          >
             {selectedBrief ? "Generate another blueprint" : "Build my idea ✦"}
           </button>
+          {foundationBlocked && (
+            <div role="status" aria-label="Blueprint foundation warning">
+              <p className="error">
+                This idea has a missing or inactive interpretation.
+                Generate and select a new idea before building another blueprint.
+                Previously saved blueprints remain available for review.
+              </p>
+              <button onClick={onIdeas} disabled={loading}>
+                Review ideas
+              </button>
+            </div>
+          )}
           <details>
             <summary>Selected idea provenance</summary>
             <IdeaOrigin idea={selectedIdea} session={session} />

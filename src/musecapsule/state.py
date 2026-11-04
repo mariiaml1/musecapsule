@@ -316,12 +316,20 @@ def append_blueprint(
     Raises:
         ValueError: If the selected idea is missing, the brief references
             another idea, or its constraints differ from the user's intent.
+            IdeaFoundationError: If a linked hypothesis is missing or inactive.
     """
+
     if state.selected_idea_id is None:
         raise ValueError("An idea must be selected before building a blueprint.")
 
-    if not any(idea.id == state.selected_idea_id for idea in state.ideas):
+    idea = next(
+        (item for item in state.ideas if item.id == state.selected_idea_id),
+        None,
+    )
+    if idea is None:
         raise ValueError("Selected idea does not exist.")
+
+    validate_idea_foundation(idea, state.hypotheses)
 
     if brief.idea_id != state.selected_idea_id:
         raise ValueError("Blueprint must reference the selected idea.")
@@ -341,3 +349,31 @@ def append_blueprint(
         briefs=[*state.briefs, brief],
         revision=state.revision + 1,
     )
+
+
+class IdeaFoundationError(ValueError):
+    """An idea's hypothesis dependencies cannot support new generation."""
+
+
+def validate_idea_foundation(
+    idea: ProductIdea,
+    hypotheses: list[Hypothesis],
+) -> None:
+    """Require every linked hypothesis to exist and remain active.
+
+    Preserve the idea and hypotheses. Unrelated hypotheses do not affect
+    eligibility. Legacy ideas without hypothesis references remain allowed.
+
+    Raises:
+        IdeaFoundationError: If a linked hypothesis is missing or inactive.
+    """
+    hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in hypotheses}
+
+    for hypothesis_id in idea.hypothesis_ids:
+        hypothesis = hypotheses_by_id.get(hypothesis_id)
+
+        if hypothesis is None:
+            raise IdeaFoundationError("Idea references a missing hypothesis.")
+
+        if hypothesis.status not in ("proposed", "supported"):
+            raise IdeaFoundationError("Idea references an inactive hypothesis.")

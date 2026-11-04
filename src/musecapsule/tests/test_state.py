@@ -13,6 +13,7 @@ from musecapsule.models import (
     ProductIdea,
 )
 from musecapsule.state import (
+    IdeaFoundationError,
     SessionState,
     append_blueprint,
     append_hypothesis,
@@ -21,7 +22,9 @@ from musecapsule.state import (
     append_product_ideas,
     revise_hypothesis_status,
     select_product_idea,
+    validate_idea_foundation,
 )
+
 
 def test_append_message_preserves_previous_state():
     state = SessionState(
@@ -974,3 +977,122 @@ def test_append_blueprint_preserves_previous_versions():
     )
     assert updated.briefs[1].problem == "New problem"
     assert state.revision == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "should_reject"),
+    [
+        ("proposed", False),
+        ("supported", False),
+        ("unsupported", True),
+        ("superseded", True),
+    ],
+)
+def test_validate_idea_foundation_checks_linked_hypothesis_status(
+    status,
+    should_reject,
+):
+    image_id = uuid4()
+    source = EvidenceRef(
+        message_id=uuid4(),
+        quote="a transparent capsule",
+    )
+    hypothesis = Hypothesis(
+        statement="Transparency could inspire inspectable execution.",
+        status=status,
+        image_ids=[image_id],
+        evidence=[source],
+    )
+    idea = ProductIdea(
+        title="Inspectable Capsule",
+        description="Inspect the results of a bounded AI workflow.",
+        goal_alignment="Demonstrates an AI portfolio project.",
+        image_ids=[image_id],
+        hypothesis_ids=[hypothesis.id],
+    )
+
+    idea_before = idea.model_dump()
+    hypothesis_before = hypothesis.model_dump()
+
+    if should_reject:
+        with pytest.raises(
+            IdeaFoundationError,
+            match="Idea references an inactive hypothesis",
+        ):
+            validate_idea_foundation(idea, [hypothesis])
+    else:
+        validate_idea_foundation(idea, [hypothesis])
+
+    assert idea.model_dump() == idea_before
+    assert hypothesis.model_dump() == hypothesis_before
+
+
+@pytest.mark.parametrize("status", ["unsupported", "superseded"])
+def test_append_blueprint_rejects_inactive_foundation_without_changing_state(
+    status,
+):
+    message = Message(
+        role="user",
+        text="A transparent capsule contains a golden note.",
+    )
+    source = EvidenceRef(
+        message_id=message.id,
+        quote="A transparent capsule",
+    )
+    image = ImageFragment(
+        label="Transparent capsule",
+        evidence=[source],
+    )
+    hypothesis = Hypothesis(
+        statement="Transparency could inspire inspectable execution.",
+        image_ids=[image.id],
+        evidence=[source],
+    )
+    idea = ProductIdea(
+        title="Inspectable Capsule",
+        description="Inspect the results of a bounded AI workflow.",
+        goal_alignment="Demonstrates an AI portfolio project.",
+        image_ids=[image.id],
+        hypothesis_ids=[hypothesis.id],
+    )
+    brief = MVPBrief(
+        idea_id=idea.id,
+        idea_summary="A workspace for inspecting one AI workflow.",
+        metaphor_origin=MetaphorOrigin(
+            image_ids=[image.id],
+            hypothesis_ids=[hypothesis.id],
+            meaning_basis="Transparency suggests inspectable execution.",
+            mechanic_mapping="The workspace displays observable workflow steps.",
+            user_confirmed=False,
+        ),
+        problem="Workflow outcomes are difficult to inspect.",
+        audience="Developers building AI prototypes.",
+        core_scenario="Run a workflow and inspect its results.",
+        features=["Display workflow results"],
+        constraints=[],
+        risks=["Model outputs may be invalid."],
+        acceptance_criteria=["A completed result can be inspected."],
+    )
+    state = SessionState(
+        intent=Intent(goal="Build an AI portfolio project"),
+        messages=[message],
+        images=[image],
+        hypotheses=[hypothesis],
+        ideas=[idea],
+        selected_idea_id=idea.id,
+        briefs=[brief],
+    )
+
+    # Represent the current state after the foundation became inactive.
+    state.hypotheses[0].status = status
+    before = state.model_dump(mode="json")
+
+    with pytest.raises(
+        IdeaFoundationError,
+        match="Idea references an inactive hypothesis",
+    ):
+        append_blueprint(state, brief.model_copy(deep=True))
+
+    assert state.model_dump(mode="json") == before
+    assert state.briefs == [brief]
+    assert state.ideas == [idea]

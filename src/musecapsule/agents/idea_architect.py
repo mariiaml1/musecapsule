@@ -14,6 +14,7 @@ from musecapsule.models import (
     MetaphorOrigin,
     ProductIdea,
 )
+from musecapsule.state import validate_idea_foundation
 
 class ProposedMetaphorOrigin(BaseModel):
     """A proposed interpretation and its connection to product mechanics."""
@@ -131,7 +132,13 @@ def generate_blueprint(
 
     Include dialogue corrections and related narrative sources.
     Do not perform external research or change session state.
+
+    Raises:
+        IdeaFoundationError: If a linked hypothesis is missing or inactive.
     """
+
+    validate_idea_foundation(idea, hypotheses)
+
     related_images = [
         image for image in images
         if image.id in idea.image_ids
