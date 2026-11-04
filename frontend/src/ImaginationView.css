@@ -59,3 +59,53 @@
 @media (prefers-reduced-motion: reduce) { .processing-dot { animation: none; } }
 
 body:has(.exploration-drawer[open]) { overflow: hidden; }
+
+/* Desktop discoveries share the workspace; compact screens use a modal drawer. */
+.focused-imagination.with-context { max-width: 1240px; }
+.imagination-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
+.with-context .imagination-columns { grid-template-columns: minmax(0, 1fr) minmax(320px, 390px); }
+.imagination-main { min-width: 0; }
+.context-sidebar { position: sticky; top: 20px; padding: 22px; max-height: calc(100dvh - 40px); overflow-y: auto; scrollbar-color: #695278 transparent; }
+.creative-context { min-width: 0; }
+.creative-context .drawer-heading { gap: 12px; }
+.creative-context .drawer-heading h2 { font-size: 21px; margin-top: 0; }
+.creative-context .drawer-heading p { font-size: 12px; line-height: 1.6; margin-bottom: 0; }
+.context-section { border-bottom: 1px solid #49374f; padding: 20px 0; }
+.context-section h3 { font-size: 15px; margin: 0 0 16px; }
+.context-section h3 > span { color: #afa0bd; font-weight: 400; }
+.context-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.context-image-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 12px 10px; margin: 0; min-width: 0; border: 1px solid #554361; background: linear-gradient(145deg, #30263f, #211d2d); border-radius: 12px; color: #d4c6e6; overflow-wrap: anywhere; }
+.context-image-card[aria-pressed="true"] { border-color: #caa0f7; box-shadow: 0 0 0 1px #caa0f7; background: linear-gradient(145deg, #49315d, #292235); }
+.image-mark { font-size: 22px; color: #c69aef; margin-bottom: 12px; }
+.image-index { font-size: 8px; letter-spacing: 1px; color: #b4a3c6; margin-bottom: 5px; }
+.context-image-card strong { font-size: 12px; line-height: 1.5; }
+.selected-image-source { padding: 12px 14px; margin-top: 14px; border-radius: 12px; border: 1px solid #554361; background: #34293f; font-size: 13px; }
+.context-quote { overflow-wrap: anywhere; }
+.context-quote blockquote { margin: 6px 0; font-size: 14px; font-style: italic; line-height: 1.65; border: none; padding-left: 0; }
+.context-quote details { margin: 4px 0; }
+.context-quote summary { font-size: 12px; text-decoration: underline; }
+.context-quote p { font-size: 13px; line-height: 1.65; white-space: pre-wrap; }
+.meaning-card { border: 1px solid #554361; border-radius: 12px; padding: 12px; background: #2c2438; margin: 10px 0 0; }
+.meaning-card > summary { display: flex; align-items: start; gap: 10px; padding: 0; color: #eee4fa; font-size: 13px; line-height: 1.6; }
+.meaning-card > summary::after { content: "⌄"; color: #c9a9ef; margin-left: auto; }
+.meaning-card[open] > summary::after { content: "⌃"; }
+.meaning-statement { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meaning-card[open] .meaning-statement { -webkit-line-clamp: unset; }
+.meaning-status { font-size: 9px; padding: 2px 7px; border-radius: 20px; color: #ebdafe; background: #59416e; flex-shrink: 0; }
+.meaning-status.unsupported, .meaning-status.superseded { background: #51323e; color: #ffbec8; }
+.meaning-card p { font-size: 12px; line-height: 1.7; }
+.context-earlier { margin: 16px 0 0; }
+.context-earlier > summary { font-weight: 500; font-size: 14px; }
+.context-earlier > .muted { font-size: 12px; }
+.with-context .scene-toolbar { flex-wrap: wrap; gap: 8px; }
+.with-context .ideas-next { flex-wrap: wrap; }
+.with-context .ideas-next .actions { flex-shrink: 1; }
+.with-context .composer-footer > span { max-width: 240px; }
+@media (max-width: 1000px) {
+  .imagination-columns { grid-template-columns: minmax(0, 1fr); }
+  .context-sidebar { display: none; }
+}
+@media (max-width: 380px) {
+  .context-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .meaning-card > summary { flex-wrap: wrap; }
+}

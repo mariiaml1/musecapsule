@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { ImaginationView } from "../src/JourneyViews";
 import type { Session } from "../src/types";
 
@@ -30,7 +30,18 @@ const session: Session = {
   ideas: [], selected_idea_id: null, briefs: [],
 };
 
+let compact = false;
+const mediaListeners = new Set<() => void>();
+function resizeContext(isCompact: boolean) {
+  act(() => { compact = isCompact; mediaListeners.forEach((notify) => notify()); });
+}
 beforeEach(() => {
+  compact = false;
+  vi.stubGlobal("matchMedia", () => ({
+    matches: compact,
+    addEventListener: (_event: string, notify: () => void) => mediaListeners.add(notify),
+    removeEventListener: (_event: string, notify: () => void) => mediaListeners.delete(notify),
+  }));
   // jsdom does not implement the browser's native dialog lifecycle.
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
     configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute("open", ""); },
@@ -43,6 +54,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
+  mediaListeners.clear();
   Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
   Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
 });
@@ -74,17 +87,19 @@ it("focuses the latest exchange while retaining the complete saved conversation"
 
 it("keeps source quotes, inactive meanings, and revision reasons accessible", () => {
   setup();
-  fireEvent.click(screen.getByRole("button", { name: /What we’ve discovered/ }));
-  const context = screen.getByRole("dialog", { name: "What we’ve discovered" });
-  expect(within(context).getByText("Golden note", { exact: true })).toBeTruthy();
+  const context = screen.getByRole("complementary", { name: "What we’ve discovered" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(within(context).getByRole("button", { name: /Golden note/ }).getAttribute("aria-pressed")).toBe("true");
   expect(within(context).getByText("No active meaning hypotheses.")).toBeTruthy();
-  const previous = within(context).getByText(/Previous interpretations/).closest("details")!;
-  fireEvent.click(within(previous).getByText(/Previous interpretations/));
+  const previous = within(context).getByText(/Earlier interpretations/).closest("details")!;
+  fireEvent.click(within(previous).getByText(/Earlier interpretations/));
   expect(within(previous).getByText("The user clarified the scene.")).toBeTruthy();
-  expect(within(previous).getByText("proposed → unsupported")).toBeTruthy();
+  expect(within(previous).getByText(/Revision 5 · proposed → unsupported/)).toBeTruthy();
   expect(within(previous).getAllByText("A golden note").length).toBeGreaterThan(0);
   fireEvent.click(within(context).getByRole("button", { name: "Close discoveries" }));
-  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("complementary", { name: "What we’ve discovered" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /What we’ve discovered/ }));
+  expect(screen.getByRole("complementary", { name: "What we’ve discovered" })).toBeTruthy();
 });
 
 it("does not present an older question as the answer to a new user message", () => {
@@ -98,4 +113,32 @@ it("starts with an inviting empty state and allows ideas only after saved images
   setup({ ...session, messages: [], images: [], hypotheses: [], hypothesis_history: [] });
   expect(screen.getByText("What do you see in your imagination?")).toBeTruthy();
   expect(screen.getByRole("button", { name: /Generate ideas/ }).hasAttribute("disabled")).toBe(true);
+});
+
+it("switches image sources without changing the scene or generating new content", () => {
+  const current = structuredClone(session);
+  current.images.push({ id: "i2", label: "Capsule", evidence: [{ message_id: "m1", quote: "A glass capsule" }] });
+  const before = structuredClone(current);
+  const { onSend, onGenerate } = setup(current);
+  const context = screen.getByRole("complementary", { name: "What we’ve discovered" });
+  fireEvent.click(within(context).getByRole("button", { name: /Capsule/ }));
+  expect(within(context).getByRole("button", { name: /Capsule/ }).getAttribute("aria-pressed")).toBe("true");
+  const sources = within(context).getByLabelText("Sources for Capsule");
+  expect(within(sources).getByText("A glass capsule", { exact: true })).toBeTruthy();
+  expect(within(sources).getByText("A glass capsule floats.")).toBeTruthy();
+  expect(current).toEqual(before);
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onGenerate).not.toHaveBeenCalled();
+});
+
+it("uses a modal for compact screens and restores the sidebar when widened", () => {
+  compact = true;
+  setup();
+  expect(screen.queryByRole("complementary", { name: "What we’ve discovered" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /What we’ve discovered/ }));
+  expect(screen.getByRole("dialog", { name: "What we’ve discovered" })).toBeTruthy();
+  resizeContext(false);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("complementary", { name: "What we’ve discovered" })).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: /Golden note/ })).toHaveLength(1);
 });

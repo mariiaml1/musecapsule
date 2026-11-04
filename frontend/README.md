@@ -72,8 +72,9 @@ Navigation changes only the current view, never session data or backend executio
   creation, a compact goal summary replaces the form. Session restoration remains
   available from the header.
 - **Imagination** — focus on the latest narrative and Guide question. The full
-  saved conversation and discoveries open in keyboard-accessible side drawers.
-  Discoveries separate source quotes, active AI proposals, and previous meanings.
+  saved conversation opens in a keyboard-accessible drawer. Discoveries sit beside
+  the scene on desktop and open as a modal on compact screens. Image cards reveal
+  exact quotes; expandable meanings preserve statuses and previous versions.
   Submitted text appears immediately as processing; only terminal SSE completion
   confirms persistence. Failed requests retain the draft. No synthetic progress,
   image generation, or RAG integration is added. Generate ideas once saved images exist;
@@ -161,11 +162,16 @@ This screenshot uses synthetic sample data with a mocked API.
 
 - Only the latest user message and a subsequent Guide question occupy the main
   exchange. Long text scrolls inside that exchange instead of growing with history.
-- Conversation preserves every saved message verbatim. Discoveries keeps images,
-  exact quotes, active meaning proposals, inactive meanings, and recorded revisions
-  accessible. Opening either drawer does not trigger generation or alter state.
-- Native modal drawers support Escape, focus containment and return, and mobile
-  screens. The goal and user constraints remain above the workspace.
+- Conversation preserves every saved message verbatim in its own modal drawer.
+  Discoveries is visible beside the scene above 1000 px, without blocking the
+  composer. It can be collapsed and reopened. Compact screens use a native modal
+  with Escape, focus containment and return.
+- Image cards select which exact source quotes to show. Meaning cards expand to
+  reveal their full saved statement, status, linked images, and source evidence.
+  Earlier interpretations retain inactive meanings and recorded status changes.
+  Cards do not merge IDs, generate pictures, or summarize interpretations.
+- The goal and constraints remain above the workspace. Browsing discoveries does
+  not trigger generation or change persisted session data.
 - Processing feedback starts immediately, before the first backend event. Detail
   labels follow actual node-start events; node completion never implies persistence.
   Pending text is local UI state, excluded from the saved conversation until the

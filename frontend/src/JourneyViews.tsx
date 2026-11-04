@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CreativeContext } from "./CreativeContext";
 import type { AgentRunStatus } from "./agent-events";
 import "./ImaginationView.css";
 import type { Session } from "./types";
@@ -114,65 +115,16 @@ export function IntentionView({
     </section>
   );
 }
-/** Display literal evidence separately from AI-proposed meanings. */
-export function ExplorationSources({ session }: { session: Session }) {
-  return (
-    <aside className="panel sources">
-      <span className="eyebrow">THREADS OF YOUR IMAGINATION</span>
-      <h3>Images & meanings</h3>
-      <p className="muted">
-        Images come from your words. Meanings are AI interpretations, not user
-        confirmation.
-      </p>
-      <h4>Extracted images</h4>
-      {!session.images.length && (
-        <p className="muted">Images will emerge as you describe your scene.</p>
-      )}
-      {session.images.map((image) => (
-        <article className="source-item" key={image.id}>
-          <strong>{image.label}</strong>
-          {image.evidence.map((e, i) => (
-            <blockquote key={i}>
-              {e.quote}
-              <details>
-                <summary>Original narrative</summary>
-                <p>
-                  {session.messages.find((m) => m.id === e.message_id)?.text ??
-                    "Source unavailable."}
-                </p>
-              </details>
-            </blockquote>
-          ))}
-        </article>
-      ))}
-      <h4>AI-proposed meanings</h4>
-      {!session.hypotheses.some((h) => h.status === "proposed" || h.status === "supported") && (
-        <p className="muted">No active meaning hypotheses.</p>
-      )}
-      {session.hypotheses.filter((h) => h.status === "proposed" || h.status === "supported").map((h) => (
-        <article className="source-item" key={h.id}>
-          <span className="source-tag">{h.status}</span>
-          <p>{h.statement}</p>
-          <p className="muted">
-            {h.image_ids
-              .map(
-                (id) =>
-                  session.images.find((i) => i.id === id)?.label ??
-                  "Image unavailable",
-              )
-              .join(" · ")}
-          </p>
-          <details>
-            <summary>Narrative evidence</summary>
-            {h.evidence.map((e, i) => (
-              <blockquote key={i}>{e.quote}</blockquote>
-            ))}
-          </details>
-        </article>
-      ))}
-    </aside>
-  );
+const compactContextQuery = "(max-width: 1000px)";
+function subscribeToContextWidth(notify: () => void) {
+  const media = window.matchMedia?.(compactContextQuery);
+  media?.addEventListener("change", notify);
+  return () => media?.removeEventListener("change", notify);
 }
+function isCompactContext() {
+  return window.matchMedia?.(compactContextQuery).matches ?? false;
+}
+
 /** Keep the current exchange in focus without discarding saved conversation. */
 export function ImaginationView({
   session, narrative, onNarrative, onSend, loading, onIdeas, onGenerate,
@@ -190,10 +142,15 @@ export function ImaginationView({
   runStatus?: AgentRunStatus;
 }) {
   const drawerRef = useRef<HTMLDialogElement>(null);
+  const contextButtonRef = useRef<HTMLButtonElement>(null);
+  const compactContext = useSyncExternalStore(subscribeToContextWidth, isCompactContext, () => true);
+  const [contextOpen, setContextOpen] = useState(true);
   const [drawer, setDrawer] = useState<"context" | "history" | null>(null);
   useEffect(() => {
-    if (drawer && !drawerRef.current?.open) drawerRef.current?.showModal();
-  }, [drawer]);
+    const modalNeeded = drawer === "history" || (drawer === "context" && compactContext);
+    if (modalNeeded && !drawerRef.current?.open) drawerRef.current?.showModal();
+    if (!modalNeeded && drawerRef.current?.open) drawerRef.current.close();
+  }, [drawer, compactContext]);
   const userIndex = session.messages.findLastIndex((m) => m.role === "user");
   const currentUser = session.messages[userIndex];
   const currentQuestion = session.messages.slice(userIndex + 1)
@@ -205,24 +162,30 @@ export function ImaginationView({
     ask_question: "Preparing your next question…",
   };
   const processing = pendingMessage !== null;
-  const previousMeanings = session.hypotheses.filter(
-    (h) => h.status === "unsupported" || h.status === "superseded",
-  );
+
 
   return (
-    <div className="focused-imagination">
+    <div className={`focused-imagination ${contextOpen && !compactContext ? "with-context" : ""}`}>
       <header className="imagination-heading">
         <div>
           <span className="eyebrow">ONE DETAIL CAN OPEN A NEW DIRECTION</span>
           <h2>Imagination</h2>
           <p className="muted">Follow your scene. There is no right answer.</p>
         </div>
-        <button className="secondary discovery-toggle"
-          aria-haspopup="dialog" onClick={() => setDrawer("context")}>
+        <button ref={contextButtonRef} className="secondary discovery-toggle"
+          aria-haspopup={compactContext ? "dialog" : undefined}
+          aria-expanded={compactContext ? drawer === "context" : contextOpen}
+          aria-controls="creative-context-panel"
+          onClick={() => {
+            if (compactContext) { setContextOpen(true); setDrawer("context"); }
+            else setContextOpen((open) => !open);
+          }}>
           What we’ve discovered · {session.images.length + session.hypotheses.length}
         </button>
       </header>
 
+      <div className="imagination-columns">
+      <div className="imagination-main">
       <section className="panel imagination-scene" aria-label="Current exploration">
         <div className="scene-toolbar">
           <span className="eyebrow">YOUR IMAGINED WORLD</span>
@@ -291,37 +254,24 @@ export function ImaginationView({
         </div>
       </section>
 
-      <dialog ref={drawerRef} className="exploration-drawer"
-        aria-labelledby={drawer === "context" ? "discoveries-title" : "conversation-title"}
-        onClose={() => setDrawer(null)} onCancel={() => setDrawer(null)}>
-        {drawer === "context" && <>
+      </div>
+      {contextOpen && !compactContext && (
+        <aside id="creative-context-panel" className="context-sidebar panel" aria-label="What we’ve discovered">
+          <CreativeContext session={session} onClose={() => {
+            setContextOpen(false);
+            contextButtonRef.current?.focus();
+          }} />
+        </aside>
+      )}
+      </div>
 
-        <header className="drawer-heading"><div><span className="eyebrow">YOUR CREATIVE CONTEXT</span>
-          <h2 id="discoveries-title">What we’ve discovered</h2></div>
-          <button className="secondary" onClick={() => drawerRef.current?.close()}
-            aria-label="Close discoveries">✕</button></header>
-        <ExplorationSources session={session} />
-        <details className="previous-meanings"><summary>Previous interpretations · {previousMeanings.length + (session.hypothesis_history?.length ?? 0)}</summary>
-          <p className="muted">Inactive interpretations remain part of the record, not an active foundation.</p>
-          {!!previousMeanings.length && <h4>Inactive meanings</h4>}
-          {previousMeanings.map((h) => <article className="source-item" key={h.id}>
-            <span className="source-tag">{h.status}</span><p>{h.statement}</p>
-            <details><summary>Narrative evidence</summary>
-              {h.evidence.map((e, i) => <blockquote key={i}>{e.quote}</blockquote>)}
-            </details>
-          </article>)}
-          {!!session.hypothesis_history?.length && <h4>Status changes</h4>}
-          {(session.hypothesis_history ?? []).map((entry, index) => (
-            <article className="source-item" key={`${entry.previous.id}-${index}`}>
-              <span className="eyebrow">REVISION {entry.session_revision}</span>
-              <p>{entry.previous.statement}</p>
-              <p className="muted">{entry.previous.status} → {entry.new_status}</p>
-              <p>{entry.reason}</p>
-              {entry.evidence.map((e, i) => <blockquote key={i}>{e.quote}</blockquote>)}
-            </article>
-          ))}
-        </details>
-        </>}
+      <dialog ref={drawerRef} className="exploration-drawer"
+        aria-label={drawer === "context" ? "What we’ve discovered" : "Conversation"}
+        onClose={() => setDrawer(null)} onCancel={() => setDrawer(null)}>
+        {drawer === "context" && compactContext && (
+          <div id="creative-context-panel"><CreativeContext session={session}
+            onClose={() => drawerRef.current?.close()} /></div>
+        )}
         {drawer === "history" && <>
         <header className="drawer-heading"><div><span className="eyebrow">YOUR SAVED EXPLORATION</span>
           <h2 id="conversation-title">Conversation</h2></div>
