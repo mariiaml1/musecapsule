@@ -45,18 +45,15 @@ export function BlueprintView({
         <>
           <h3>{selectedIdea.title}</h3>
           <p>{selectedIdea.description}</p>
-          <button
-            onClick={onBuild}
-            disabled={loading || foundationBlocked}
-          >
+          <button onClick={onBuild} disabled={loading || foundationBlocked}>
             {selectedBrief ? "Generate another blueprint" : "Build my idea ✦"}
           </button>
           {foundationBlocked && (
             <div role="status" aria-label="Blueprint foundation warning">
               <p className="error">
-                This idea has a missing or inactive interpretation.
-                Generate and select a new idea before building another blueprint.
-                Previously saved blueprints remain available for review.
+                This idea has a missing or inactive interpretation. Generate and
+                select a new idea before building another blueprint. Previously
+                saved blueprints remain available for review.
               </p>
               <button onClick={onIdeas} disabled={loading}>
                 Review ideas
@@ -139,6 +136,35 @@ export function BlueprintView({
                   <li key={index}>{risk}</li>
                 ))}
               </ul>
+              <section aria-label="Reference material">
+                <h4>Reference material</h4>
+                <p className="muted">
+                  Supporting material cited in this blueprint. Citations do not
+                  establish external verification.
+                </p>
+
+                {(selectedBrief.references ?? []).length > 0 ? (
+                  <ul>
+                    {(selectedBrief.references ?? []).map(
+                      (reference, index) => (
+                        <li key={`${reference.chunk_id}-${index}`}>
+                          <blockquote>{reference.quote}</blockquote>
+                          <details>
+                            <summary>Source identifiers</summary>
+                            <p>Document ID: {reference.document_id}</p>
+                            <p>Chunk ID: {reference.chunk_id}</p>
+                          </details>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                ) : (
+                  <p className="muted">
+                    No reference material was cited in this blueprint.
+                  </p>
+                )}
+              </section>
+
               <h4>Definition of Done</h4>
               <ul>
                 {selectedBrief.acceptance_criteria.map((criterion, index) => (

@@ -64,18 +64,26 @@ export interface ArchitectureComponent {
     suggested_technology: string | null;
 }
 
+/** An exact quotation from reference material supplied to the architect. */
+export interface ReferenceCitation {
+    document_id: string;
+    chunk_id: string;
+    quote: string;
+}
+
 export interface MVPBrief {
-    idea_id: string;
-    idea_summary: string;
-    metaphor_origin: MetaphorOrigin;
-    problem: string;
-    audience: string;
-    core_scenario: string;
-    features: string[];
-    constraints: string[];
-    risks: string[];
-    acceptance_criteria: string[];
-    suggested_architecture: ArchitectureComponent[];
+  idea_id: string;
+  idea_summary: string;
+  metaphor_origin: MetaphorOrigin;
+  problem: string;
+  audience: string;
+  core_scenario: string;
+  features: string[];
+  constraints: string[];
+  risks: string[];
+  acceptance_criteria: string[];
+  suggested_architecture: ArchitectureComponent[];
+  references?: ReferenceCitation[];
 }
 
 /** An exact narrative quote linked to its original message. */

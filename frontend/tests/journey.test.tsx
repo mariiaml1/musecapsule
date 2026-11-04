@@ -13,9 +13,8 @@ import * as api from "../src/api";
 import type { Session } from "../src/types";
 
 vi.mock("../src/api", async () => {
-  const actual = await vi.importActual<typeof import("../src/api")>(
-    "../src/api",
-  );
+  const actual =
+    await vi.importActual<typeof import("../src/api")>("../src/api");
 
   return {
     ...actual,
@@ -91,6 +90,76 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
 describe("creative journey", () => {
+  it.each(["missing", "empty", "cited"] as const)(
+    "renders blueprint references for the %s case without generation",
+    async (referenceState) => {
+      const references =
+        referenceState === "cited"
+          ? [
+              {
+                document_id: "document-1",
+                chunk_id: "chunk-1",
+                quote: "Preserve the learner's position.",
+              },
+            ]
+          : [];
+
+      await restore({
+        ...fixture,
+        selected_idea_id: "idea-1",
+        briefs: [
+          {
+            idea_id: "idea-1",
+            idea_summary: "Saved blueprint with reference support",
+            problem: "Losing context",
+            audience: "Learners",
+            core_scenario: "Save and reopen a passage",
+            features: ["Save a bookmark"],
+            constraints: [],
+            risks: ["Passage locations may change"],
+            acceptance_criteria: ["A bookmark can be reopened"],
+            suggested_architecture: [],
+            metaphor_origin: {
+              image_ids: ["image-1"],
+              hypothesis_ids: ["h1"],
+              meaning_basis: "A possible interpretation",
+              mechanic_mapping: "Note becomes artifact",
+              user_confirmed: false,
+            },
+            ...(referenceState === "missing" ? {} : { references }),
+          },
+        ],
+      });
+
+      navigate("Blueprint");
+
+      const section = screen.getByRole("region", {
+        name: "Reference material",
+      });
+
+      if (referenceState === "cited") {
+        expect(
+          within(section).getByText("Preserve the learner's position."),
+        ).toBeTruthy();
+
+        fireEvent.click(within(section).getByText("Source identifiers"));
+
+        expect(
+          within(section).getByText("Document ID: document-1"),
+        ).toBeTruthy();
+        expect(within(section).getByText("Chunk ID: chunk-1")).toBeTruthy();
+      } else {
+        expect(
+          within(section).getByText(
+            "No reference material was cited in this blueprint.",
+          ),
+        ).toBeTruthy();
+      }
+
+      expect(api.streamBlueprint).not.toHaveBeenCalled();
+    },
+  );
+
   it("adds a revised idea without changing selection or building a blueprint", async () => {
     const session = structuredClone(fixture);
     session.selected_idea_id = "idea-1";
@@ -121,7 +190,9 @@ describe("creative journey", () => {
     expect(api.reviseIdea).toHaveBeenCalledWith("session-1", "idea-1");
     expect(screen.getByText("Revised from: Idea capsule")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "View Original: Idea capsule" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "View Original: Idea capsule" }),
+    );
     const originalHeading = screen.getByRole("heading", {
       name: "Idea capsule",
       exact: true,
@@ -181,18 +252,16 @@ describe("creative journey", () => {
 
       expect(buildButton.hasAttribute("disabled")).toBe(true);
       expect(screen.getByText("Previously saved blueprint")).toBeTruthy();
-      expect(screen.getByRole("status", {
-        name: "Blueprint foundation warning",
-      }).textContent,).toContain(
-        "This idea has a missing or inactive interpretation.",
-      );
+      expect(
+        screen.getByRole("status", {
+          name: "Blueprint foundation warning",
+        }).textContent,
+      ).toContain("This idea has a missing or inactive interpretation.");
 
       fireEvent.click(buildButton);
       expect(api.streamBlueprint).not.toHaveBeenCalled();
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Review ideas" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Review ideas" }));
 
       expect(
         screen.getByRole("heading", { name: "Ideas", exact: true }),
@@ -234,7 +303,6 @@ describe("creative journey", () => {
     ).toBeNull();
 
     expect(api.createSession).toHaveBeenCalledTimes(1);
-
   });
   it("restores and navigates without generation or loss of draft or revision", async () => {
     await restore();
@@ -269,7 +337,9 @@ describe("creative journey", () => {
       selected_idea_id: "idea-1",
       revision: 8,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Choose this version" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose this version" }),
+    );
     await screen.findByRole("heading", { name: "Engineering Blueprint" });
     expect(api.selectIdea).toHaveBeenCalledWith("session-1", "idea-1");
     expect(api.streamBlueprint).not.toHaveBeenCalled();
@@ -278,7 +348,9 @@ describe("creative journey", () => {
   it("keeps failed selection in the ideas view", async () => {
     await restore();
     vi.mocked(api.selectIdea).mockRejectedValue(new Error("Selection failed"));
-    fireEvent.click(screen.getByRole("button", { name: "Choose this version" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose this version" }),
+    );
     await screen.findByRole("alert");
     expect(
       screen.getByRole("heading", { name: "Ideas", exact: true }),
@@ -357,9 +429,7 @@ describe("creative journey", () => {
       screen.getByLabelText("Your imagined scene or next detail"),
       { target: { value: "Another note" } },
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Continue →" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue →" }));
     await screen.findByText(
       "Result unconfirmed. Reopen the session before retrying.",
     );
@@ -373,7 +443,11 @@ describe("creative journey", () => {
     ).toBe("Another note");
     expect(api.loadSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Exploring your scene…")).toBeNull();
-    expect(screen.getByRole("button", { name: "Continue →" }).hasAttribute("disabled")).toBe(false);
+    expect(
+      screen
+        .getByRole("button", { name: "Continue →" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
   });
   it("reloads a conflicting session and retains failed workflow status", async () => {
     await restore();
@@ -426,9 +500,7 @@ describe("creative journey", () => {
     );
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain(
-      "Generation could not be completed.",
-    );
+    expect(alert.textContent).toContain("Generation could not be completed.");
 
     await waitFor(() => {
       expect(
@@ -518,49 +590,105 @@ describe("creative journey", () => {
     let finish!: (value: Awaited<ReturnType<typeof api.streamMessage>>) => void;
     vi.mocked(api.streamMessage).mockImplementation((_id, _text, onNode) => {
       node = onNode;
-      return new Promise((resolve) => { finish = resolve; });
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
     });
-    fireEvent.change(screen.getByLabelText("Your imagined scene or next detail"), {
-      target: { value: "The note starts to glow." },
-    });
+    fireEvent.change(
+      screen.getByLabelText("Your imagined scene or next detail"),
+      {
+        target: { value: "The note starts to glow." },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Continue →" }));
-    const exchange = screen.getByRole("region", { name: "Current exploration" });
-    expect(within(exchange).getByText("The note starts to glow.", { selector: "p" })).toBeTruthy();
+    const exchange = screen.getByRole("region", {
+      name: "Current exploration",
+    });
+    expect(
+      within(exchange).getByText("The note starts to glow.", { selector: "p" }),
+    ).toBeTruthy();
     expect(within(exchange).getByText(/Processing/)).toBeTruthy();
     expect(within(exchange).getByText("Exploring your scene…")).toBeTruthy();
     expect(within(exchange).queryByText("What happens next?")).toBeNull();
-    expect(screen.getByRole("button", { name: "Continuing…" }).hasAttribute("disabled")).toBe(true);
-    act(() => node({ event: "node_started", data: { node: "explore_images" } }));
-    expect(within(exchange).getByText("Finding images in your words…")).toBeTruthy();
-    act(() => node({ event: "node_completed", data: { node: "explore_images" } }));
+    expect(
+      screen
+        .getByRole("button", { name: "Continuing…" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    act(() =>
+      node({ event: "node_started", data: { node: "explore_images" } }),
+    );
+    expect(
+      within(exchange).getByText("Finding images in your words…"),
+    ).toBeTruthy();
+    act(() =>
+      node({ event: "node_completed", data: { node: "explore_images" } }),
+    );
     expect(screen.queryByText("Workflow result saved.")).toBeNull();
     expect(api.loadSession).toHaveBeenCalledTimes(1);
-    vi.mocked(api.loadSession).mockResolvedValue({ ...fixture, revision: 8, messages: [
-      ...fixture.messages,
-      { id: "m3", role: "user", text: "The note starts to glow." },
-      { id: "m4", role: "assistant", text: "What changes around it?" },
-    ] });
-    await act(async () => finish({ event: "session_completed", data: { session_id: fixture.id, revision: 8 } }));
+    vi.mocked(api.loadSession).mockResolvedValue({
+      ...fixture,
+      revision: 8,
+      messages: [
+        ...fixture.messages,
+        { id: "m3", role: "user", text: "The note starts to glow." },
+        { id: "m4", role: "assistant", text: "What changes around it?" },
+      ],
+    });
+    await act(async () =>
+      finish({
+        event: "session_completed",
+        data: { session_id: fixture.id, revision: 8 },
+      }),
+    );
     expect(screen.getByText("What changes around it?")).toBeTruthy();
     expect(screen.queryByText("Exploring your scene…")).toBeNull();
     expect(screen.getByText("Workflow result saved.")).toBeTruthy();
-    expect((screen.getByLabelText("Your imagined scene or next detail") as HTMLTextAreaElement).value).toBe("");
-    expect(api.streamMessage).toHaveBeenCalledExactlyOnceWith(fixture.id, "The note starts to glow.", expect.any(Function));
+    expect(
+      (
+        screen.getByLabelText(
+          "Your imagined scene or next detail",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("");
+    expect(api.streamMessage).toHaveBeenCalledExactlyOnceWith(
+      fixture.id,
+      "The note starts to glow.",
+      expect.any(Function),
+    );
   });
 
   it("does not label idea generation as exploration of an unsent draft", async () => {
     await restore();
     navigate("Imagination");
     let finish!: (value: Awaited<ReturnType<typeof api.streamIdeas>>) => void;
-    vi.mocked(api.streamIdeas).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    fireEvent.change(screen.getByLabelText("Your imagined scene or next detail"), {
-      target: { value: "An unsent scene" },
-    });
+    vi.mocked(api.streamIdeas).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    fireEvent.change(
+      screen.getByLabelText("Your imagined scene or next detail"),
+      {
+        target: { value: "An unsent scene" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: /Generate ideas/ }));
     expect(screen.queryByText("Exploring your scene…")).toBeNull();
     expect(screen.queryByRole("button", { name: "Continuing…" })).toBeNull();
-    await act(async () => finish({ event: "run_failed", data: { code: "execution_failed", message: "Generation failed" } }));
-    expect((screen.getByLabelText("Your imagined scene or next detail") as HTMLTextAreaElement).value).toBe("An unsent scene");
+    await act(async () =>
+      finish({
+        event: "run_failed",
+        data: { code: "execution_failed", message: "Generation failed" },
+      }),
+    );
+    expect(
+      (
+        screen.getByLabelText(
+          "Your imagined scene or next detail",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("An unsent scene");
   });
-
 });
