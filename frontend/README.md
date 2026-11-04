@@ -74,8 +74,10 @@ Navigation changes only the current view, never session data or backend executio
 - **Imagination** — explore through dialogue, with extracted images, exact quotes,
   and AI-proposed hypotheses alongside it. Generate ideas once saved images exist;
   answering every clarification question is optional. Unsent text is excluded.
-- **Ideas** — readable cards with image labels and expandable metaphor provenance.
-  Selecting an idea saves the choice, then opens Blueprint without generating it.
+- **Ideas** — a concept sidebar groups explicit idea ancestry, with a separate
+  detail pane for the version being viewed. Browsing versions never changes the
+  persisted selection. Choosing a version saves the choice, then opens Blueprint
+  without generating it.
 - **Blueprint** — explicitly generate an engineering plan for the saved selection.
   The selected idea and the blueprint each expose their own source references.
 - **Under the hood / Agent Activity** — collapsible, available from every view.
@@ -87,11 +89,32 @@ Ideas when saved ideas exist, and otherwise Imagination. Navigation remains
 available during a request; mutating actions stay disabled while it runs.
 Draft text survives stage navigation and is cleared when opening another session.
 
+## Idea Versions Workspace
+
+![Ideas workspace showing a proposed revision beside its history](../docs/images/idea-versions.png)
+
+The screenshot uses synthetic sample data with a mocked API.
+
+- Original ideas and revisions are grouped only by `previous_idea_id`, never by
+  title similarity. Each revision names its immediate parent, including branches.
+- Current foundation badges distinguish active, inactive, missing, and legacy
+  unlinked interpretations. Active does not mean user-confirmed or validated.
+- Source images, proposed meanings, and product behavior use saved data. Product
+  behavior uses the viewed version's saved blueprint mapping when available, or
+  its original idea description. Full quotes remain available under source evidence.
+- Comparison shows both saved descriptions verbatim, without LLM summarization.
+- Successful revision opens the new proposal for inspection, leaving the chosen
+  version unchanged. No blueprint is built automatically.
+- Missing ancestors and circular histories remain visible with warnings.
+- The sidebar stacks above details on narrow screens; all version controls are
+  keyboard-accessible buttons.
+
 ## Frontend Structure
 
 `App.tsx` retains session state and command handlers. `JourneyViews.tsx` contains
 navigation, intention, dialogue, and exploration sources. `IdeasView.tsx` and
-`BlueprintView.tsx` render saved products. `IdeaOrigin.tsx` resolves provenance.
+`BlueprintView.tsx` render saved products. `idea-versions.ts` handles ancestry and
+foundation status, and `IdeasView.css` contains responsive workspace styling. `IdeaOrigin.tsx` resolves provenance.
 `AgentActivity.tsx` contains the existing graph and lifecycle presentation.
 `api.ts`, `agent-events.ts`, and `flow-path.ts` retain their existing contracts.
 No backend changes are required.
@@ -105,6 +128,9 @@ backend is required. `npm run test:all` runs both suites. Browser visual QA and 
 live backend smoke test remain separate checks.
 
 ## Current Limitations
+
+- Idea revision currently uses the JSON endpoint, not SSE node events. Its loading
+  indicator does not simulate Agent Flow activity.
 
 - Live execution events cover narrative exploration, idea generation,
   and engineering blueprint generation.

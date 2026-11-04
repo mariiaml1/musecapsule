@@ -121,6 +121,7 @@ describe("creative journey", () => {
     expect(api.reviseIdea).toHaveBeenCalledWith("session-1", "idea-1");
     expect(screen.getByText("Revised from: Idea capsule")).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "View Original: Idea capsule" }));
     const originalHeading = screen.getByRole("heading", {
       name: "Idea capsule",
       exact: true,
@@ -237,6 +238,7 @@ describe("creative journey", () => {
   });
   it("restores and navigates without generation or loss of draft or revision", async () => {
     await restore();
+    expect(screen.queryByText("Saving or loading your session…")).toBeNull();
     navigate("Imagination");
     fireEvent.change(
       screen.getByLabelText("Your imagined scene or next detail"),
@@ -267,7 +269,7 @@ describe("creative journey", () => {
       selected_idea_id: "idea-1",
       revision: 8,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Choose this idea" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose this version" }));
     await screen.findByRole("heading", { name: "Engineering Blueprint" });
     expect(api.selectIdea).toHaveBeenCalledWith("session-1", "idea-1");
     expect(api.streamBlueprint).not.toHaveBeenCalled();
@@ -276,7 +278,7 @@ describe("creative journey", () => {
   it("keeps failed selection in the ideas view", async () => {
     await restore();
     vi.mocked(api.selectIdea).mockRejectedValue(new Error("Selection failed"));
-    fireEvent.click(screen.getByRole("button", { name: "Choose this idea" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose this version" }));
     await screen.findByRole("alert");
     expect(
       screen.getByRole("heading", { name: "Ideas", exact: true }),

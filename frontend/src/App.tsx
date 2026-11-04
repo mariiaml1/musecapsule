@@ -303,6 +303,10 @@ export default function App() {
       const updated = await reviseIdea(currentSessionId, ideaId);
       setSession(updated);
       setStage("ideas");
+      return updated.ideas.find(
+        (idea) => idea.previous_idea_id === ideaId &&
+          !session.ideas.some((previous) => previous.id === idea.id),
+      )?.id;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Idea revision failed.",
@@ -355,11 +359,15 @@ export default function App() {
           {error}
         </p>
       )}
-      {revisingIdeaId
-        ? "Revising your idea…"
-        : agentRunStatus === "running"
-          ? "Your imagination is taking shape…"
-          : "Saving or loading your session…"}
+      {loading && (
+        <p role="status" className="muted">
+          {revisingIdeaId
+            ? "Revising your idea…"
+            : agentRunStatus === "running"
+              ? "Your imagination is taking shape…"
+              : "Saving or loading your session…"}
+        </p>
+      )}
       {stage === "intention" && (
         <IntentionView
           session={session}
@@ -385,6 +393,7 @@ export default function App() {
       )}
       {session && stage === "ideas" && (
         <IdeasView
+          key={session.id}
           session={session}
           loading={loading}
           onGenerate={handleGenerateIdeas}
