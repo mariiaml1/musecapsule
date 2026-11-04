@@ -71,8 +71,12 @@ Navigation changes only the current view, never session data or backend executio
 - **Intention** — enter a goal and constraints before creating a session. After
   creation, a compact goal summary replaces the form. Session restoration remains
   available from the header.
-- **Imagination** — explore through dialogue, with extracted images, exact quotes,
-  and AI-proposed hypotheses alongside it. Generate ideas once saved images exist;
+- **Imagination** — focus on the latest narrative and Guide question. The full
+  saved conversation and discoveries open in keyboard-accessible side drawers.
+  Discoveries separate source quotes, active AI proposals, and previous meanings.
+  Submitted text appears immediately as processing; only terminal SSE completion
+  confirms persistence. Failed requests retain the draft. No synthetic progress,
+  image generation, or RAG integration is added. Generate ideas once saved images exist;
   answering every clarification question is optional. Unsent text is excluded.
 - **Ideas** — a concept sidebar groups explicit idea ancestry, with a separate
   detail pane for the version being viewed. Browsing versions never changes the
@@ -148,3 +152,23 @@ live backend smoke test remain separate checks.
 - Diagram topology is maintained in the frontend to match the backend workflow.
 - Observed transitions are derived from sequential node events;
   parallel execution is not supported by this visualization.
+
+## Focused Imagination Workspace
+
+![Current scene, Guide question, and compact composer](../docs/images/imagination-workspace.png)
+
+This screenshot uses synthetic sample data with a mocked API.
+
+- Only the latest user message and a subsequent Guide question occupy the main
+  exchange. Long text scrolls inside that exchange instead of growing with history.
+- Conversation preserves every saved message verbatim. Discoveries keeps images,
+  exact quotes, active meaning proposals, inactive meanings, and recorded revisions
+  accessible. Opening either drawer does not trigger generation or alter state.
+- Native modal drawers support Escape, focus containment and return, and mobile
+  screens. The goal and user constraints remain above the workspace.
+- Processing feedback starts immediately, before the first backend event. Detail
+  labels follow actual node-start events; node completion never implies persistence.
+  Pending text is local UI state, excluded from the saved conversation until the
+  server confirms completion and the session is reloaded.
+- Future reference material can be presented separately in Discoveries; retrieval,
+  document upload, and invented image thumbnails are not implemented here.
