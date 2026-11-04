@@ -14,6 +14,7 @@ from musecapsule.models import (
     Message,
     MetaphorOrigin,
     ProductIdea,
+    ReferenceCitation,
 )
 
 
@@ -325,3 +326,53 @@ def test_product_idea_preserves_previous_version_reference():
 
     assert restored.id == idea.id
     assert restored.previous_idea_id == previous_idea_id
+
+
+def test_reference_citation_preserves_exact_quote():
+    document_id = uuid4()
+    chunk_id = uuid4()
+    quote = "  Use bounded retries.\n"
+
+    citation = ReferenceCitation(
+        document_id=document_id,
+        chunk_id=chunk_id,
+        quote=quote,
+    )
+
+    assert citation.document_id == document_id
+    assert citation.chunk_id == chunk_id
+    assert citation.quote == quote
+
+
+@pytest.mark.parametrize("quote", ["", " ", "\t\n"])
+def test_reference_citation_rejects_blank_quote(quote):
+    with pytest.raises(ValidationError):
+        ReferenceCitation(
+            document_id=uuid4(),
+            chunk_id=uuid4(),
+            quote=quote,
+        )
+
+
+def test_mvp_brief_accepts_legacy_payload_without_references():
+    payload = {
+        "idea_id": str(uuid4()),
+        "idea_summary": "A bounded agent testing arena.",
+        "metaphor_origin": {
+            "image_ids": [str(uuid4())],
+            "hypothesis_ids": [],
+            "meaning_basis": "A small actor in a bounded environment.",
+            "mechanic_mapping": "The agent operates within a fixed budget.",
+            "user_confirmed": False,
+        },
+        "problem": "Agent failures are difficult to reproduce.",
+        "audience": "Developers testing AI agents.",
+        "core_scenario": "Run a bounded scenario and inspect its outcome.",
+        "features": ["Run one test scenario"],
+        "risks": ["Model behavior may vary"],
+        "acceptance_criteria": ["A failed run can be inspected"],
+    }
+
+    brief = MVPBrief.model_validate(payload)
+
+    assert brief.references == []

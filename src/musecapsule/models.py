@@ -128,6 +128,27 @@ class ArchitectureComponent(BaseModel):
     )
 
 
+class ReferenceCitation(BaseModel):
+    """An exact quote from a retrieved reference fragment.
+
+    Source existence and quote grounding require separate validation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: UUID
+    chunk_id: UUID
+    quote: str = Field(min_length=1)
+
+    @field_validator("quote")
+    @classmethod
+    def reject_blank_quote(cls, value: str) -> str:
+        """Reject blank quotes without changing their source text."""
+        if not value.strip():
+            raise ValueError("Reference quote must not be blank.")
+        return value
+
+
 class MVPBrief(BaseModel):
     """An implementation proposal for a selected product idea.
 
@@ -150,6 +171,7 @@ class MVPBrief(BaseModel):
         default_factory=list,
         max_length=6,
     )
+    references: list[ReferenceCitation] = Field(default_factory=list)
 
     @field_validator(
         "features",

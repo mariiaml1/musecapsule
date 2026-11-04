@@ -1,8 +1,10 @@
 from unittest.mock import Mock
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
 from musecapsule import server
+from musecapsule.models import ProductIdea
 
 
 def test_server_reuses_embedder_for_reference_uploads(tmp_path, monkeypatch):
@@ -47,9 +49,7 @@ def test_server_reuses_embedder_for_reference_uploads(tmp_path, monkeypatch):
             assert response.status_code == 201
             assert response.json()["text"] == text
 
-        assert client.get(
-            f"/sessions/{session['id']}"
-        ).json() == session
+        assert client.get(f"/sessions/{session['id']}").json() == session
 
     create_embedder.assert_called_once_with()
     assert embed.call_count == 2
@@ -91,9 +91,7 @@ def test_server_skips_embedder_when_rag_is_disabled(tmp_path, monkeypatch):
     create_embedder.assert_not_called()
 
 
-def test_server_searches_saved_index_with_shared_embedder(
-    tmp_path, monkeypatch
-):
+def test_server_searches_saved_index_with_shared_embedder(tmp_path, monkeypatch):
     monkeypatch.setenv("MUSECAPSULE_DEVKIT_DIR", str(tmp_path))
     monkeypatch.setenv(
         "MUSECAPSULE_DATABASE",
@@ -102,10 +100,7 @@ def test_server_searches_saved_index_with_shared_embedder(
     monkeypatch.setenv("MUSECAPSULE_RAG_ENABLED", "1")
 
     embed = Mock(
-        side_effect=lambda texts: [
-            [1.0] + [0.0] * 383
-            for _ in texts
-        ],
+        side_effect=lambda texts: [[1.0] + [0.0] * 383 for _ in texts],
     )
     create_embedder = Mock(return_value=embed)
     graph = Mock()
@@ -166,4 +161,71 @@ def test_server_searches_saved_index_with_shared_embedder(
 
     create_embedder.assert_called_once_with()
     embed.assert_called_once_with([query])
+    graph.invoke.assert_not_called()
+
+
+def test_server_connects_blueprint_retrieval_to_saved_sources(tmp_path, monkeypatch):
+    monkeypatch.setenv("MUSECAPSULE_DEVKIT_DIR", str(tmp_path))
+    monkeypatch.setenv(
+        "MUSECAPSULE_DATABASE",
+        str(tmp_path / "sessions.db"),
+    )
+    monkeypatch.setenv("MUSECAPSULE_RAG_ENABLED", "1")
+
+    embed = Mock(
+        side_effect=lambda texts: [[1.0] + [0.0] * 383 for _ in texts],
+    )
+    create_embedder = Mock(return_value=embed)
+    graph = Mock()
+    build_graph = Mock(return_value=graph)
+
+    monkeypatch.setattr(server, "create_local_embedder", create_embedder)
+    monkeypatch.setattr(server, "build_exploration_graph", build_graph)
+
+    app = server.create_local_app()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/sessions",
+            json={"goal": "Build an AI portfolio project"},
+        )
+        assert response.status_code == 201
+        session_id = UUID(response.json()["id"])
+
+        response = client.post(
+            f"/sessions/{session_id}/references",
+            json={
+                "title": "Reliability notes",
+                "text": "Use bounded retries.",
+            },
+        )
+        assert response.status_code == 201
+        document_id = UUID(response.json()["id"])
+
+    retrieve = build_graph.call_args.kwargs["retrieve_references"]
+    assert retrieve is not None
+
+    idea = ProductIdea(
+        title="Bounded Retry Runner",
+        description="Run requests within an explicit retry budget.",
+        goal_alignment="Demonstrates agent reliability.",
+        image_ids=[uuid4()],
+        hypothesis_ids=[],
+    )
+
+    embed.reset_mock()
+    chunks = retrieve(session_id, idea)
+
+    assert len(chunks) == 1
+    assert chunks[0].document_id == document_id
+    assert chunks[0].session_id == session_id
+    assert chunks[0].text == "Use bounded retries."
+
+    embed.assert_called_once_with(
+        [
+            f"{idea.title}\n{idea.description}",
+        ]
+    )
+    create_embedder.assert_called_once_with()
+    build_graph.assert_called_once()
     graph.invoke.assert_not_called()

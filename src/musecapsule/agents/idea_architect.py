@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from musecapsule.knowledge import ReferenceChunk
 from musecapsule.models import (
     ArchitectureComponent,
     Hypothesis,
@@ -13,6 +14,7 @@ from musecapsule.models import (
     Message,
     MetaphorOrigin,
     ProductIdea,
+    ReferenceCitation,
 )
 from musecapsule.state import validate_idea_foundation
 
@@ -47,6 +49,8 @@ class BlueprintResponse(BaseModel):
         default_factory=list,
         max_length=6,
     )
+    references: list[ReferenceCitation] = Field(default_factory=list)
+
 
 def parse_blueprint_response(
     raw_response: str,
@@ -55,6 +59,7 @@ def parse_blueprint_response(
     intent: Intent,
     images: list[ImageFragment],
     hypotheses: list[Hypothesis],
+    reference_chunks: list[ReferenceChunk] | None = None,
 ) -> MVPBrief:
     """Validate blueprint sources and bind the result to the selected idea.
 
@@ -69,10 +74,7 @@ def parse_blueprint_response(
     existing_image_ids = {image.id for image in images}
     idea_image_ids = set(idea.image_ids)
     idea_hypothesis_ids = set(idea.hypothesis_ids)
-    hypotheses_by_id = {
-        hypothesis.id: hypothesis
-        for hypothesis in hypotheses
-    }
+    hypotheses_by_id = {hypothesis.id: hypothesis for hypothesis in hypotheses}
 
     for image_id in origin.image_ids:
         if image_id not in existing_image_ids:
@@ -99,6 +101,22 @@ def parse_blueprint_response(
     if set(origin.hypothesis_ids) != set(idea.hypothesis_ids):
         raise ValueError("Blueprint must preserve all hypotheses linked to the idea.")
 
+    chunks_by_id = {chunk.id: chunk for chunk in (reference_chunks or [])}
+
+    for citation in parsed.references:
+        chunk = chunks_by_id.get(citation.chunk_id)
+
+        if chunk is None:
+            raise ValueError(
+                "Blueprint references a chunk outside the supplied context."
+            )
+
+        if citation.document_id != chunk.document_id:
+            raise ValueError("Blueprint citation references a different document.")
+
+        if citation.quote not in chunk.text:
+            raise ValueError("Blueprint reference quote was not found in the chunk.")
+
     return MVPBrief(
         idea_id=idea.id,
         idea_summary=parsed.idea_summary,
@@ -117,7 +135,9 @@ def parse_blueprint_response(
         risks=parsed.risks,
         acceptance_criteria=parsed.acceptance_criteria,
         suggested_architecture=parsed.suggested_architecture,
+        references=parsed.references,
     )
+
 
 def generate_blueprint(
     idea: ProductIdea,
@@ -127,6 +147,7 @@ def generate_blueprint(
     images: list[ImageFragment],
     hypotheses: list[Hypothesis],
     generate: Callable[[str], str],
+    reference_chunks: list[ReferenceChunk] | None = None,
 ) -> MVPBrief:
     """Generate an engineering brief while preserving the idea's origin.
 
@@ -138,6 +159,8 @@ def generate_blueprint(
     """
 
     validate_idea_foundation(idea, hypotheses)
+
+    supplied_chunks = list(reference_chunks or [])
 
     related_images = [
         image for image in images
@@ -152,17 +175,18 @@ def generate_blueprint(
         {
             "intent": intent.model_dump(mode="json"),
             "idea": idea.model_dump(mode="json"),
-            "messages": [
-                message.model_dump(mode="json")
-                for message in messages
-            ],
-            "images": [
-                image.model_dump(mode="json")
-                for image in related_images
-            ],
+            "messages": [message.model_dump(mode="json") for message in messages],
+            "images": [image.model_dump(mode="json") for image in related_images],
             "hypotheses": [
-                hypothesis.model_dump(mode="json")
-                for hypothesis in related_hypotheses
+                hypothesis.model_dump(mode="json") for hypothesis in related_hypotheses
+            ],
+            "reference_chunks": [
+                {
+                    "chunk_id": str(chunk.id),
+                    "document_id": str(chunk.document_id),
+                    "text": chunk.text,
+                }
+                for chunk in supplied_chunks
             ],
         },
         ensure_ascii=False,
@@ -176,4 +200,5 @@ def generate_blueprint(
         intent=intent,
         images=related_images,
         hypotheses=related_hypotheses,
+        reference_chunks=supplied_chunks,
     )

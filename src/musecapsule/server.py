@@ -15,11 +15,11 @@ from musecapsule.embeddings import (
     EMBEDDING_MODEL_NAME,
     create_local_embedder,
 )
-from musecapsule.knowledge import ReferenceDocument
+from musecapsule.knowledge import ReferenceChunk, ReferenceDocument
 from musecapsule.knowledge_service import ingest_reference_document
 from musecapsule.knowledge_storage import KnowledgeStore
 from musecapsule.llm import request_generation
-from musecapsule.models import Message
+from musecapsule.models import Message, ProductIdea
 from musecapsule.retrieval import SemanticMatch, search_index
 from musecapsule.state import SessionState
 from musecapsule.workflow import build_exploration_graph
@@ -56,16 +56,6 @@ def create_local_app() -> FastAPI:
             )
 
         return generate
-
-    graph = build_exploration_graph(
-        generate_images=create_generator("metaphor_explorer.md"),
-        generate_hypotheses=create_generator("hypothesis_proposals.md"),
-        generate_revisions=create_generator("hypothesis_revisions.md"),
-        generate_question=create_generator("imagination_guide.md"),
-        generate_ideas=create_generator("idea_evolution.md"),
-        generate_architecture=create_generator("idea_architect.md"),
-        generate_idea_revision=create_generator("idea_revision.md"),
-    )
 
     def process_message(
         session: SessionState,
@@ -165,6 +155,9 @@ def create_local_app() -> FastAPI:
     reference_handler: ReferenceIngestionHandler | None = None
 
     reference_search_handler: ReferenceSearchHandler | None = None
+    blueprint_retriever: Callable[[UUID, ProductIdea], list[ReferenceChunk]] | None = (
+        None
+    )
 
     if os.environ.get("MUSECAPSULE_RAG_ENABLED", "0") == "1":
         embed = create_local_embedder()
@@ -210,6 +203,35 @@ def create_local_app() -> FastAPI:
             )
 
         reference_search_handler = search_reference_material
+
+        def retrieve_blueprint_references(
+            session_id: UUID,
+            idea: ProductIdea,
+        ) -> list[ReferenceChunk]:
+            """Retrieve supporting material for the selected idea."""
+            query = f"{idea.title}\n{idea.description}"
+
+            matches = search_reference_material(
+                session_id,
+                query,
+                3,
+                0.30,
+            )
+
+            return [match.chunk for match in matches]
+
+        blueprint_retriever = retrieve_blueprint_references
+
+    graph = build_exploration_graph(
+        generate_images=create_generator("metaphor_explorer.md"),
+        generate_hypotheses=create_generator("hypothesis_proposals.md"),
+        generate_revisions=create_generator("hypothesis_revisions.md"),
+        generate_question=create_generator("imagination_guide.md"),
+        generate_ideas=create_generator("idea_evolution.md"),
+        generate_architecture=create_generator("idea_architect.md"),
+        generate_idea_revision=create_generator("idea_revision.md"),
+        retrieve_references=blueprint_retriever,
+    )
 
     return create_app(
         database_path,

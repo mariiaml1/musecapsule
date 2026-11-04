@@ -15,7 +15,8 @@ from musecapsule.agents.metaphor_explorer import (
     propose_hypotheses,
     propose_hypothesis_revisions,
 )
-from musecapsule.models import Message
+from musecapsule.knowledge import ReferenceChunk
+from musecapsule.models import Message, ProductIdea
 from musecapsule.state import (
     SessionState,
     append_blueprint,
@@ -26,6 +27,7 @@ from musecapsule.state import (
     append_revised_product_idea,
     revise_hypothesis_status,
     select_product_idea,
+    validate_idea_foundation,
 )
 from langgraph.config import get_stream_writer
 
@@ -74,6 +76,9 @@ def build_exploration_graph(
     generate_ideas: Callable[[str], str],
     generate_architecture: Callable[[str], str],
     generate_idea_revision: Callable[[str], str] | None = None,
+    retrieve_references: (
+        Callable[[UUID, ProductIdea], list[ReferenceChunk]] | None
+    ) = None,
 ):
     """Compile an exploration workflow for one user message."""
 
@@ -260,6 +265,17 @@ def build_exploration_graph(
         if idea is None:
             raise ValueError("Selected idea does not exist.")
 
+        # Reject an inactive foundation before retrieval or generation.
+        validate_idea_foundation(idea, session.hypotheses)
+
+        reference_chunks: list[ReferenceChunk] = []
+
+        if retrieve_references is not None:
+            reference_chunks = retrieve_references(session.id, idea)
+
+            if any(chunk.session_id != session.id for chunk in reference_chunks):
+                raise ValueError("Retrieved references belong to a different session.")
+
         brief = generate_blueprint(
             idea,
             session.intent,
@@ -267,6 +283,7 @@ def build_exploration_graph(
             images=session.images,
             hypotheses=session.hypotheses,
             generate=generate_architecture,
+            reference_chunks=reference_chunks,
         )
 
         return {
